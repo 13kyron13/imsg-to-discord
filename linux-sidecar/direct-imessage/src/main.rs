@@ -498,8 +498,15 @@ async fn bridge() -> Result<()> {
     .await;
 
     let mut handles = client.identity.get_handles().await;
+    let initially_connected = matches!(
+        connection.resource_state.borrow().clone(),
+        ResourceState::Generated
+    );
     emit(&Event::Ready).await?;
-    emit(&Event::Status { connected: true }).await?;
+    emit(&Event::Status {
+        connected: initially_connected,
+    })
+    .await?;
 
     let mut subscription = connection.messages_cont.subscribe();
     let mut resource_state = connection.resource_state.subscribe();
