@@ -100,6 +100,24 @@ jobs:
           '
           git -C /tmp/rustpush submodule update --init --recursive
 
+      - name: Prepare rustpush FairPlay build assets
+        run: |
+          mkdir -p /tmp/rustpush/certs/fairplay
+          for name in \
+            4056631661436364584235346952193 \
+            4056631661436364584235346952194 \
+            4056631661436364584235346952195 \
+            4056631661436364584235346952196 \
+            4056631661436364584235346952197 \
+            4056631661436364584235346952198 \
+            4056631661436364584235346952199 \
+            4056631661436364584235346952200 \
+            4056631661436364584235346952201 \
+            4056631661436364584235346952208; do
+            cp /tmp/rustpush/certs/legacy-fairplay/fairplay.pem /tmp/rustpush/certs/fairplay/"$name.pem"
+            cp /tmp/rustpush/certs/legacy-fairplay/fairplay.crt /tmp/rustpush/certs/fairplay/"$name.crt"
+          done
+
       - name: Patch direct backend to the fetched rustpush source
         run: |
           sed -i 's#^rustpush =.*#rustpush = { path = "/tmp/rustpush", default-features = false, features = ["remote-anisette-v3"] }#' linux-sidecar/direct-imessage/Cargo.toml
