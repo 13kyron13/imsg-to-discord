@@ -70,6 +70,22 @@ git -C "$RUSTPUSH_DIR" submodule foreach --recursive '
 
 git -C "$RUSTPUSH_DIR" submodule update --init --recursive
 
+mkdir -p "$RUSTPUSH_DIR/certs/fairplay"
+for name in \
+  4056631661436364584235346952193 \
+  4056631661436364584235346952194 \
+  4056631661436364584235346952195 \
+  4056631661436364584235346952196 \
+  4056631661436364584235346952197 \
+  4056631661436364584235346952198 \
+  4056631661436364584235346952199 \
+  4056631661436364584235346952200 \
+  4056631661436364584235346952201 \
+  4056631661436364584235346952208; do
+  cp "$RUSTPUSH_DIR/certs/legacy-fairplay/fairplay.pem" "$RUSTPUSH_DIR/certs/fairplay/$name.pem"
+  cp "$RUSTPUSH_DIR/certs/legacy-fairplay/fairplay.crt" "$RUSTPUSH_DIR/certs/fairplay/$name.crt"
+done
+
 mkdir -p "$DIRECT_DIR/src"
 cp "$ROOT/linux-sidecar/direct-imessage/Cargo.toml" "$DIRECT_DIR/Cargo.toml"
 cp -R "$ROOT/linux-sidecar/direct-imessage/src/." "$DIRECT_DIR/src/"
