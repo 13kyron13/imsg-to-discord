@@ -206,16 +206,24 @@ fn sanitize_filename(name: &str, fallback: &str) -> String {
 fn sanitize_id(value: &str) -> String {
     value
         .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') { ch } else { '_' })
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+                ch
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
 fn cleanup_attachment_cache(dir: &Path) -> Result<()> {
     fs::create_dir_all(dir)?;
-    let max_age = Duration::from_secs(env_u64(
-        "IMSG_RUSTPUSH_ATTACHMENT_MAX_AGE_HOURS",
-        DEFAULT_ATTACHMENT_MAX_AGE_HOURS,
-    ) * 3600);
+    let max_age = Duration::from_secs(
+        env_u64(
+            "IMSG_RUSTPUSH_ATTACHMENT_MAX_AGE_HOURS",
+            DEFAULT_ATTACHMENT_MAX_AGE_HOURS,
+        ) * 3600,
+    );
     let now = SystemTime::now();
 
     for entry in fs::read_dir(dir)? {
