@@ -16,7 +16,7 @@ function normalizeMessage(message) {
     text: typeof message.text === 'string' ? message.text : '',
     attachments: Array.isArray(message.attachments) ? message.attachments.filter(a => a && a.path).map(a => ({
       path: String(a.path),
-      name: a.name ? String(a.name) : String(a.path).split(/[\\/]/).pop(),
+      name: a.name ? String(a.name) : String(a.path).split(/[\/\\]/).pop(),
       mimeType: a.mimeType == null ? null : String(a.mimeType)
     })) : []
   };
