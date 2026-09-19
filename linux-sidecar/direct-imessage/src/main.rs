@@ -28,6 +28,7 @@ const DEFAULT_STATE: &str = "imessage-state.plist";
 const DEFAULT_ANISETTE: &str = "anisette";
 const DEFAULT_ATTACHMENT_DIR: &str = "attachments";
 const DEFAULT_MAX_ATTACHMENT_MB: u64 = 100;
+const DEFAULT_MAX_ATTACHMENTS: usize = 10;
 const DEFAULT_ATTACHMENT_MAX_AGE_HOURS: u64 = 24;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -218,6 +219,12 @@ fn sanitize_id(value: &str) -> String {
 
 fn cleanup_attachment_cache(dir: &Path) -> Result<()> {
     fs::create_dir_all(dir)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
+    }
     let max_age = Duration::from_secs(
         env_u64(
             "IMSG_RUSTPUSH_ATTACHMENT_MAX_AGE_HOURS",
@@ -251,8 +258,15 @@ async fn save_incoming_attachments(
     let max_bytes = env_u64("IMSG_RUSTPUSH_MAX_ATTACHMENT_MB", DEFAULT_MAX_ATTACHMENT_MB)
         .saturating_mul(1024 * 1024);
     let mut attachments = Vec::new();
+    let max_attachments = env_u64(
+        "IMSG_RUSTPUSH_MAX_ATTACHMENTS",
+        DEFAULT_MAX_ATTACHMENTS as u64,
+    ) as usize;
 
     for (index, part) in normal.parts.0.iter().enumerate() {
+        if max_attachments != 0 && attachments.len() >= max_attachments {
+            break;
+        }
         let MessagePart::Attachment(attachment) = &part.part else {
             continue;
         };
