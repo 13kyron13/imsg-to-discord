@@ -64,3 +64,15 @@ Do not confuse:
 - Linux can directly authenticate to iMessage
 
 Only the first two are implemented by this repository today.
+
+
+## Privacy controls
+
+Treat privacy settings as security-sensitive presentation policy.
+
+- Never include message text or attachment files when visibility is notification-only.
+- hideSender must remove both the direct sender and group name from generated Discord content.
+- Deletion applies to the Discord copy only. It must never call transport methods that delete or modify the original iMessage.
+- Only OWNER_ID in CHANNEL_ID may use settings or delete buttons.
+- Persist only chat IDs and deletion timestamps; do not persist incoming message bodies.
+- Future chat-specific privacy settings must not weaken the global owner/channel authorization.
