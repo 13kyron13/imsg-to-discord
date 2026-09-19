@@ -34,13 +34,6 @@ if (!DISCORD_TOKEN || !CHANNEL_ID || !OWNER_ID) {
 const STATE_FILE = path.join(__dirname, 'state.json');
 const CONTACTS_FILE = path.join(__dirname, 'contacts.json');
 
-const DEFAULT_SETTINGS = {
-  visibility: 'full',
-  hideSender: false,
-  deleteMode: 'keep',
-  deleteAfterSeconds: 60,
-};
-
 function loadState() {
   try {
     const loaded = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
@@ -147,7 +140,7 @@ function settingsDescription() {
     '',
     'These settings affect newly forwarded iMessages.',
     'Deleting a Discord copy does not delete the original iMessage.',
-  ].join('\\n');
+  ].join('\n');
 }
 
 function settingsPanel() {
