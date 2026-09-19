@@ -12,6 +12,7 @@ function normalizeMessage(message) {
     sender: message.sender == null ? null : String(message.sender),
     chatName: message.chatName == null ? null : String(message.chatName),
     isGroup: Boolean(message.isGroup),
+    service: message.service == null ? null : String(message.service),
     text: typeof message.text === 'string' ? message.text : '',
     attachments: Array.isArray(message.attachments) ? message.attachments.filter(a => a && a.path).map(a => ({
       path: String(a.path),
