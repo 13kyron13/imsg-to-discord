@@ -528,7 +528,7 @@ async fn bridge() -> Result<()> {
 
                                 let service = if is_sms {
                                     MessageType::SMS {
-                                        is_phone: true,
+                                        is_phone: false,
                                         using_number: match sms_using_number(&handles) {
                                             Ok(number) => number,
                                             Err(error) => {
