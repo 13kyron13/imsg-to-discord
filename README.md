@@ -62,7 +62,7 @@ See [AGENTS.md](AGENTS.md) for instructions for contributors and coding agents.
 
 Requirements:
 
-- Node.js 20.6+
+- Node.js 22+
 - A private Discord server/channel
 - macOS for the native macOS backend, or Linux x86_64 plus a compatible iMessage backend for Linux
 
