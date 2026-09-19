@@ -7,13 +7,13 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use rpassword::prompt_password;
+use rustpush::macos::MacOSConfig;
 use rustpush::{
     authenticate_apple, default_provider, login_apple_delegates, register, APSConnectionResource,
-    APSState, AppleAccount, ConversationData, FACETIME_SERVICE, IDSNGMIdentity, IDSUser, IMClient,
-    LoginDelegate, MADRID_SERVICE, Message, MessageInst, MessageType, MULTIPLEX_SERVICE,
-    NormalMessage, OSConfig, VIDEO_SERVICE,
+    APSState, AppleAccount, ConversationData, IDSNGMIdentity, IDSUser, IMClient, LoginDelegate,
+    Message, MessageInst, MessageType, NormalMessage, OSConfig, FACETIME_SERVICE, MADRID_SERVICE,
+    MULTIPLEX_SERVICE, VIDEO_SERVICE,
 };
-use rustpush::macos::MacOSConfig;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
