@@ -8,9 +8,9 @@ The sidecar currently implements only the NDJSON process protocol:
 
 - emits `{"event":"ready"}` on startup
 - accepts `{"action":"send","chatId":"...","text":"..."}`
-- returns a clear error until the direct iMessage backend is enabled
+- returns a clear error until a direct iMessage backend is integrated
 
-The direct iMessage implementation is planned behind the `direct-imessage` Cargo feature.
+The stable sidecar build intentionally does not pull the unfinished rustpush integration. That keeps normal CI independent of rustpush's own Git submodules.
 
 ## Build
 
@@ -29,4 +29,4 @@ The Node bridge automatically restarts the sidecar if it exits unexpectedly.
 
 ## Direct backend
 
-The optional `direct-imessage` feature pins the current rustpush revision being evaluated for the Linux implementation. It is deliberately not enabled by default until the Apple authentication, registration, incoming-event, and send paths are integrated and tested.
+The planned direct backend lives in the separate `linux-sidecar/direct-imessage/` crate. It will pin and integrate rustpush without making the stable protocol crate depend on that external Git repository.
