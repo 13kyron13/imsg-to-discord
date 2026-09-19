@@ -105,6 +105,11 @@ bash install-autostart.sh
 
 Follow the Full Disk Access instruction it prints for Node, and check `err.log` if something doesn't work.
 
+
+Once the autostart is run, you can use this to restart the code again if its on in the background.
+
+`launchctl kickstart -k gui/$(id -u)/com.user.discordbridge`
+
 ## Using it
 
 - Every incoming text is posted to the channel and pings you.
