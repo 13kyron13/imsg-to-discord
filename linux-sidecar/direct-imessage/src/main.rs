@@ -1,7 +1,9 @@
 use std::{
+    fs,
     io::{self, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
+    time::{Duration, SystemTime},
 };
 
 use anyhow::{anyhow, Context, Result};
@@ -11,8 +13,8 @@ use rustpush::macos::MacOSConfig;
 use rustpush::{
     authenticate_apple, default_provider, login_apple_delegates, register, APSConnectionResource,
     APSState, AppleAccount, ConversationData, IDSNGMIdentity, IDSUser, IMClient, LoginDelegate,
-    Message, MessageInst, MessageType, NormalMessage, OSConfig, FACETIME_SERVICE, MADRID_SERVICE,
-    MULTIPLEX_SERVICE, VIDEO_SERVICE,
+    Message, MessageInst, MessagePart, MessageType, NormalMessage, OSConfig, ResourceState,
+    FACETIME_SERVICE, MADRID_SERVICE, MULTIPLEX_SERVICE, VIDEO_SERVICE,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -21,6 +23,9 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 const DEFAULT_HWCONFIG: &str = "hwconfig.plist";
 const DEFAULT_STATE: &str = "imessage-state.plist";
 const DEFAULT_ANISETTE: &str = "anisette";
+const DEFAULT_ATTACHMENT_DIR: &str = "attachments";
+const DEFAULT_MAX_ATTACHMENT_MB: u64 = 100;
+const DEFAULT_ATTACHMENT_MAX_AGE_HOURS: u64 = 24;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SavedState {
@@ -69,6 +74,7 @@ struct NormalizedMessage {
     chat_name: Option<String>,
     #[serde(rename = "isGroup")]
     is_group: bool,
+    service: &'static str,
     text: String,
     attachments: Vec<Attachment>,
 }
@@ -118,7 +124,11 @@ fn load_config(path: &PathBuf) -> Result<Arc<MacOSConfig>> {
     Ok(Arc::new(config))
 }
 
-fn chat_id_from_participants(participants: &[String], self_handles: &[String]) -> String {
+fn chat_id_from_participants(
+    participants: &[String],
+    self_handles: &[String],
+    is_sms: bool,
+) -> String {
     let mut filtered: Vec<String> = participants
         .iter()
         .filter(|participant| !self_handles.contains(participant))
@@ -126,13 +136,18 @@ fn chat_id_from_participants(participants: &[String], self_handles: &[String]) -
         .collect();
     filtered.sort();
     let encoded = URL_SAFE_NO_PAD.encode(filtered.join("\n"));
-    format!("imsg:{encoded}")
+    let prefix = if is_sms { "sms:" } else { "imsg:" };
+    format!("{prefix}{encoded}")
 }
 
-fn participants_from_chat_id(chat_id: &str) -> Result<Vec<String>> {
-    let encoded = chat_id
-        .strip_prefix("imsg:")
-        .ok_or_else(|| anyhow!("unsupported chatId format"))?;
+fn participants_from_chat_id(chat_id: &str) -> Result<(Vec<String>, bool)> {
+    let (encoded, is_sms) = if let Some(encoded) = chat_id.strip_prefix("imsg:") {
+        (encoded, false)
+    } else if let Some(encoded) = chat_id.strip_prefix("sms:") {
+        (encoded, true)
+    } else {
+        return Err(anyhow!("unsupported chatId format"));
+    };
     let bytes = URL_SAFE_NO_PAD
         .decode(encoded)
         .context("invalid encoded chatId")?;
@@ -147,7 +162,135 @@ fn participants_from_chat_id(chat_id: &str) -> Result<Vec<String>> {
         return Err(anyhow!("chatId contains no recipients"));
     }
 
-    Ok(participants)
+    Ok((participants, is_sms))
+}
+
+fn env_u64(name: &str, default: u64) -> u64 {
+    std::env::var(name)
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(default)
+}
+
+fn attachment_cache_dir() -> PathBuf {
+    env_path("IMSG_RUSTPUSH_ATTACHMENT_DIR", DEFAULT_ATTACHMENT_DIR)
+}
+
+fn sanitize_filename(name: &str, fallback: &str) -> String {
+    let base = Path::new(name)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or(fallback);
+
+    let sanitized: String = base
+        .chars()
+        .map(|ch| {
+            if ch.is_control() || matches!(ch, '/' | '\\') {
+                '_'
+            } else {
+                ch
+            }
+        })
+        .collect();
+
+    if sanitized.is_empty() {
+        fallback.to_string()
+    } else {
+        sanitized
+    }
+}
+
+fn sanitize_id(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') { ch } else { '_' })
+        .collect()
+}
+
+fn cleanup_attachment_cache(dir: &Path) -> Result<()> {
+    fs::create_dir_all(dir)?;
+    let max_age = Duration::from_secs(env_u64(
+        "IMSG_RUSTPUSH_ATTACHMENT_MAX_AGE_HOURS",
+        DEFAULT_ATTACHMENT_MAX_AGE_HOURS,
+    ) * 3600);
+    let now = SystemTime::now();
+
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let metadata = entry.metadata()?;
+        if !metadata.is_file() {
+            continue;
+        }
+        let modified = metadata.modified().unwrap_or(now);
+        if now.duration_since(modified).unwrap_or_default() > max_age {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+
+    Ok(())
+}
+
+async fn save_incoming_attachments(
+    connection: &rustpush::APSConnection,
+    message_id: &str,
+    normal: &NormalMessage,
+) -> Result<Vec<Attachment>> {
+    let dir = attachment_cache_dir();
+    fs::create_dir_all(&dir)?;
+    let max_bytes = env_u64("IMSG_RUSTPUSH_MAX_ATTACHMENT_MB", DEFAULT_MAX_ATTACHMENT_MB)
+        .saturating_mul(1024 * 1024);
+    let mut attachments = Vec::new();
+
+    for (index, part) in normal.parts.0.iter().enumerate() {
+        let MessagePart::Attachment(attachment) = &part.part else {
+            continue;
+        };
+
+        let size = attachment.get_size() as u64;
+        if max_bytes != 0 && size > max_bytes {
+            eprintln!(
+                "[rustpush] skipping attachment {} ({} bytes exceeds {} bytes)",
+                attachment.name, size, max_bytes
+            );
+            continue;
+        }
+
+        let fallback = format!("attachment-{index}");
+        let name = sanitize_filename(&attachment.name, &fallback);
+        let filename = format!("{}_{}_{}", sanitize_id(message_id), index, name);
+        let path = dir.join(filename);
+        let file = fs::File::create(&path)?;
+        attachment
+            .get_attachment(connection.resource.as_ref(), file, |_done, _total| {})
+            .await
+            .with_context(|| format!("downloading attachment {}", attachment.name))?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
+        }
+
+        attachments.push(Attachment {
+            path: path.to_string_lossy().into_owned(),
+            name,
+            mime_type: if attachment.mime.is_empty() {
+                None
+            } else {
+                Some(attachment.mime.clone())
+            },
+        });
+    }
+
+    Ok(attachments)
+}
+
+fn sms_using_number(handles: &[String]) -> Result<String> {
+    handles
+        .iter()
+        .find(|handle| handle.starts_with("tel:"))
+        .cloned()
+        .ok_or_else(|| anyhow!("no phone handle is registered for SMS sending"))
 }
 
 async fn emit(event: &Event) -> Result<()> {
@@ -262,6 +405,7 @@ async fn bridge() -> Result<()> {
 
     let config = load_config(&hwconfig_path)?;
     let saved = load_state(&state_path)?;
+    cleanup_attachment_cache(&attachment_cache_dir())?;
 
     let (connection, error) =
         APSConnectionResource::new(config.clone(), Some(saved.push.clone())).await;
@@ -309,6 +453,7 @@ async fn bridge() -> Result<()> {
     emit(&Event::Status { connected: true }).await?;
 
     let mut subscription = connection.messages_cont.subscribe();
+    let mut resource_state = connection.resource_state.subscribe();
     let stdin = tokio::io::stdin();
     let mut lines = BufReader::new(stdin).lines();
 
@@ -319,8 +464,8 @@ async fn bridge() -> Result<()> {
                     Some(line) if !line.trim().is_empty() => {
                         match serde_json::from_str::<Request>(&line) {
                             Ok(Request::Send { chat_id, text }) => {
-                                let participants = match participants_from_chat_id(&chat_id) {
-                                    Ok(participants) => participants,
+                                let (participants, is_sms) = match participants_from_chat_id(&chat_id) {
+                                    Ok(value) => value,
                                     Err(error) => {
                                         emit(&Event::Error { error: error.to_string() }).await?;
                                         continue;
@@ -344,7 +489,23 @@ async fn bridge() -> Result<()> {
                                     after_guid: None,
                                 };
 
-                                let message = NormalMessage::new(text, MessageType::IMessage);
+                                let service = if is_sms {
+                                    MessageType::SMS {
+                                        is_phone: true,
+                                        using_number: match sms_using_number(&handles) {
+                                            Ok(number) => number,
+                                            Err(error) => {
+                                                emit(&Event::Error { error: error.to_string() }).await?;
+                                                continue;
+                                            }
+                                        },
+                                        from_handle: None,
+                                    }
+                                } else {
+                                    MessageType::IMessage
+                                };
+
+                                let message = NormalMessage::new(text, service);
                                 let mut message = MessageInst::new(
                                     conversation,
                                     &sender,
@@ -383,9 +544,18 @@ async fn bridge() -> Result<()> {
                                         .map(|data| data.participants.clone())
                                         .unwrap_or_default();
 
+                                    let is_sms = matches!(normal.service, MessageType::SMS { .. });
+                                    let attachments =
+                                        save_incoming_attachments(&connection, &message.id, normal)
+                                            .await?;
+
                                     let normalized = NormalizedMessage {
                                         id: message.id.clone(),
-                                        chat_id: chat_id_from_participants(&participants, &handles),
+                                        chat_id: chat_id_from_participants(
+                                            &participants,
+                                            &handles,
+                                            is_sms,
+                                        ),
                                         sender: message.sender.clone(),
                                         chat_name: conversation
                                             .as_ref()
@@ -394,8 +564,9 @@ async fn bridge() -> Result<()> {
                                             .as_ref()
                                             .map(ConversationData::is_group)
                                             .unwrap_or(false),
+                                        service: if is_sms { "sms" } else { "imessage" },
                                         text: normal.parts.raw_text(),
-                                        attachments: Vec::new(),
+                                        attachments,
                                     };
 
                                     emit(&Event::Message { message: normalized }).await?;
@@ -427,6 +598,28 @@ async fn bridge() -> Result<()> {
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => {
                         emit(&Event::Status { connected: false }).await?;
                         return Err(anyhow!("rustpush connection message stream closed"));
+                    }
+                }
+            }
+            state_change = resource_state.changed() => {
+                state_change?;
+                match resource_state.borrow_and_update().clone() {
+                    ResourceState::Generated => {
+                        let current_push = connection.state.read().await.clone();
+                        if let Ok(mut state) = state.lock() {
+                            state.push = current_push;
+                            if let Err(error) = save_state(&state_path, &state) {
+                                eprintln!("[rustpush] failed to persist reconnected state: {error:#}");
+                            }
+                        }
+                        emit(&Event::Status { connected: true }).await?;
+                    }
+                    ResourceState::Generating | ResourceState::Failed(_) => {
+                        emit(&Event::Status { connected: false }).await?;
+                    }
+                    ResourceState::Closed => {
+                        emit(&Event::Status { connected: false }).await?;
+                        return Err(anyhow!("rustpush APS resource closed"));
                     }
                 }
             }
