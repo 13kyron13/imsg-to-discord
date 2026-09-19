@@ -37,7 +37,7 @@ Legend:
 [x] Add systemd user startup.
 [~] Define stable backend event schema.
 [ ] Integrate a real direct-iMessage Linux backend.
-[~] Design rustpush sidecar integration.
+[~] Design direct Rust sidecar integration.
 [ ] Import/enrich Intel Mac hardware key.
 [ ] Add x86_64 NAC validation.
 [ ] Add Apple ID / 2FA provisioning.
@@ -106,7 +106,7 @@ Legend:
 ## Linux rustpush integration
 [x] Add dedicated Rust sidecar scaffold instead of using rustpush test executable.
 [x] Document the current upstream API/integration boundary.
-[x] Pin a known-good rustpush revision.
+[x] Record a known-good rustpush revision for the direct integration crate.
 [ ] Implement hardware-config import.
 [ ] Implement persistent Apple authentication state.
 [ ] Implement 2FA provisioning flow.
@@ -117,5 +117,5 @@ Legend:
 
 ## Rust sidecar
 [x] Add linux-sidecar Cargo project with stable NDJSON protocol.
-[x] Pin rustpush dependency revision behind an optional direct-imessage feature.
-[~] Implement real rustpush-backed authentication and IMClient event handling.
+[x] Isolate the evaluated rustpush revision from the stable sidecar build.
+[~] Implement real rustpush-backed authentication and IMClient event handling in the direct-imessage crate.

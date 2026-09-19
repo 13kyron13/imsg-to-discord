@@ -32,7 +32,7 @@ Do not build the production Linux bridge by scraping the output of that test exe
 
 ## Proposed sidecar
 
-Create a small Rust executable in this project that depends on rustpush and implements this repository's NDJSON contract.
+Create a dedicated Rust integration crate under `linux-sidecar/direct-imessage/` that depends on rustpush and implements this repository's NDJSON contract.
 
 ### Incoming event
 
@@ -111,8 +111,8 @@ The sidecar must:
 
 ## First implementation milestones
 
-- [ ] Create Rust sidecar crate.
-- [ ] Pin a known-good rustpush revision.
+- [x] Create stable Rust sidecar crate.
+- [x] Pin the evaluated rustpush revision in the direct integration crate.
 - [ ] Load imported hardware configuration.
 - [ ] Implement Apple authentication and persisted state.
 - [ ] Complete 2FA provisioning without placing credentials in command-line arguments.

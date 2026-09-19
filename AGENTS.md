@@ -31,7 +31,7 @@ Hackintosh is intentionally not a separate code path. If macOS exposes the norma
 
 Target Linux x86_64 first.
 
-The current Linux transport is an NDJSON subprocess adapter. It provides a stable boundary for a direct iMessage implementation such as rustpush without tying the Discord bridge to that project's internal APIs.
+The current Linux transport is an NDJSON subprocess adapter. It provides a stable boundary for a future direct iMessage implementation without tying the Discord bridge to low-level Apple network APIs.
 
 Incoming event:
     {"event":"message","message":{...}}
@@ -56,7 +56,7 @@ Linux requires LINUX_IMESSAGE_COMMAND until a direct Linux iMessage backend is i
 
 ## Important distinction
 
-This repository contains the Discord bridge and transport abstraction. The low-level Apple network implementation is a separate backend.
+This repository contains the Discord bridge and transport abstraction. The low-level Apple network implementation is a separate backend. The unfinished rustpush integration is kept outside the stable sidecar crate so normal CI does not depend on rustpush's Git submodules.
 
 Do not confuse:
 - Linux transport interface exists
@@ -83,7 +83,7 @@ Treat privacy settings as security-sensitive presentation policy.
 - Keep privacy policy tests platform-independent under `test/`.
 - Linux transport changes should include or update an NDJSON subprocess test.
 - Do not make tests require a live Apple Account, Discord token, Messages database, or hardware key.
-- CI intentionally tests the cross-platform layers without attempting real iMessage authentication.
+- CI intentionally tests the cross-platform layers without attempting real iMessage authentication or downloading the unfinished rustpush dependency.
 
 ## State persistence
 

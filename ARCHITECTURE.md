@@ -62,7 +62,7 @@ Outgoing:
 
 This is deliberately an adapter boundary, not a fake iMessage implementation.
 
-The planned direct backend is a rustpush-compatible integration. Current upstream work documents Linux x86_64 operation using hardware information extracted once from an Intel Mac, with local NAC validation. That is the route intended for this project.
+The planned direct backend is a dedicated Rust integration. The evaluated rustpush revision is kept in the separate linux-sidecar/direct-imessage crate so the stable NDJSON sidecar does not inherit rustpush's external Git submodules.
 
 ## Normalized message shape
 
@@ -166,13 +166,13 @@ The delete button and settings interactions are restricted to OWNER_ID in CHANNE
 
 The Linux transport uses exponential restart backoff when its local backend exits unexpectedly. The first retry is five seconds and the delay grows to a maximum of sixty seconds. A clean bot shutdown disables automatic restarts.
 
-The repository's tests use Node's built-in test runner and include privacy-policy tests, normalized transport tests, and a Linux subprocess integration test. GitHub Actions runs the test suite on Node 20 and Node 22.
+The repository's tests use Node's built-in test runner and include privacy-policy tests, normalized transport tests, and a Linux subprocess integration test. GitHub Actions runs the test suite on Node 22 and Node 24.
 
 
 ## Linux sidecar
 
 `linux-sidecar/` is the Rust process boundary for the eventual direct Linux iMessage backend.
 
-The current sidecar implements the stable NDJSON process protocol and reports a clear error for send requests until the direct rustpush-backed implementation is enabled. The Node `LinuxTransport` process supervisor, not the sidecar, owns restart/backoff behavior.
+The current sidecar implements the stable NDJSON process protocol and reports a clear error for send requests until a direct iMessage backend is integrated. The Node `LinuxTransport` process supervisor, not the sidecar, owns restart/backoff behavior.
 
-The Cargo manifest pins the evaluated rustpush revision behind the optional `direct-imessage` feature so the protocol scaffold can build independently while the Apple authentication and IMClient integration are developed.
+The separate `linux-sidecar/direct-imessage/` crate is the integration workspace for the evaluated rustpush revision. Keeping it separate prevents the unfinished external dependency from breaking the stable protocol build.
