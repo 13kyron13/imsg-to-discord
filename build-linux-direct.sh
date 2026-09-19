@@ -37,9 +37,6 @@ export GIT_TERMINAL_PROMPT=0
 
 echo "Fetching pinned rustpush source..."
 
-git config --global url."https://github.com/".insteadOf "git@github.com:"
-git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
-
 git clone "https://github.com/OpenBubbles/rustpush.git" "$RUSTPUSH_DIR"
 git -C "$RUSTPUSH_DIR" fetch --no-tags origin "$RUSTPUSH_REV"
 git -C "$RUSTPUSH_DIR" checkout --detach "$RUSTPUSH_REV"
@@ -67,7 +64,9 @@ git -C "$RUSTPUSH_DIR" submodule foreach --recursive '
 
 git -C "$RUSTPUSH_DIR" submodule update --init --recursive
 
-cp -R "$ROOT/linux-sidecar/direct-imessage/." "$DIRECT_DIR/"
+mkdir -p "$DIRECT_DIR/src"
+cp "$ROOT/linux-sidecar/direct-imessage/Cargo.toml" "$DIRECT_DIR/Cargo.toml"
+cp -R "$ROOT/linux-sidecar/direct-imessage/src/." "$DIRECT_DIR/src/"
 
 sed -i "s#rustpush = { git = \"https://github.com/OpenBubbles/rustpush\", rev = \"$RUSTPUSH_REV\" }#rustpush = { path = \"$RUSTPUSH_DIR\" }#" "$DIRECT_DIR/Cargo.toml"
 
