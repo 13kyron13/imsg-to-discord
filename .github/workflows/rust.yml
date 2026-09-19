@@ -1,0 +1,28 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  linux-sidecar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Check formatting
+        run: cargo fmt --manifest-path linux-sidecar/Cargo.toml -- --check
+
+      - name: Check Linux sidecar
+        run: cargo check --manifest-path linux-sidecar/Cargo.toml
