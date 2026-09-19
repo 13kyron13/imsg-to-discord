@@ -25,9 +25,14 @@ jobs:
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
           git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global url."https://github.com/OpenBubbles/".insteadOf "git@github.com:OpenBubbles/"
+          git config --global url."https://github.com/OpenBubbles/".insteadOf "ssh://git@github.com/OpenBubbles/"
+          git config --global protocol.version 2
 
       - name: Check formatting
         run: cargo fmt --manifest-path linux-sidecar/Cargo.toml -- --check
 
       - name: Check Linux sidecar
+        env:
+          CARGO_NET_GIT_FETCH_WITH_CLI: "true"
         run: cargo check --manifest-path linux-sidecar/Cargo.toml
