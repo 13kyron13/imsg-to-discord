@@ -695,3 +695,85 @@ async fn main() -> Result<()> {
         )),
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn imessage_chat_ids_round_trip_deterministically() {
+        let participants = vec![
+            "tel:+61422222222".to_string(),
+            "tel:+61411111111".to_string(),
+            "tel:+61499999999".to_string(),
+        ];
+        let self_handles = vec!["tel:+61499999999".to_string()];
+
+        let chat_id = chat_id_from_participants(&participants, &self_handles, false);
+        let (decoded, is_sms) = participants_from_chat_id(&chat_id).unwrap();
+
+        assert!(!is_sms);
+        assert_eq!(
+            decoded,
+            vec![
+                "tel:+61411111111".to_string(),
+                "tel:+61422222222".to_string(),
+            ]
+        );
+
+        let second = chat_id_from_participants(
+            &participants.iter().rev().cloned().collect::<Vec<_>>(),
+            &self_handles,
+            false,
+        );
+        assert_eq!(chat_id, second);
+    }
+
+    #[test]
+    fn sms_chat_ids_keep_the_sms_namespace() {
+        let participants = vec![
+            "tel:+61422222222".to_string(),
+            "tel:+61411111111".to_string(),
+        ];
+
+        let chat_id = chat_id_from_participants(&participants, &[], true);
+        assert!(chat_id.starts_with("sms:"));
+
+        let (decoded, is_sms) = participants_from_chat_id(&chat_id).unwrap();
+        assert!(is_sms);
+        assert_eq!(
+            decoded,
+            vec![
+                "tel:+61411111111".to_string(),
+                "tel:+61422222222".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn invalid_chat_ids_are_rejected() {
+        assert!(participants_from_chat_id("chat-1").is_err());
+        assert!(participants_from_chat_id("imsg:not-base64").is_err());
+        assert!(participants_from_chat_id("imsg:").is_err());
+    }
+
+    #[test]
+    fn attachment_names_are_safe_for_local_paths() {
+        assert_eq!(
+            sanitize_filename("../../private.txt", "fallback"),
+            "private.txt"
+        );
+        assert_eq!(
+            sanitize_filename("photo\u{0000}.jpg", "fallback"),
+            "photo_.jpg"
+        );
+        assert_eq!(sanitize_filename("", "fallback"), "fallback");
+    }
+
+    #[test]
+    fn attachment_ids_are_safe_for_local_names() {
+        assert_eq!(sanitize_id("A/B:C 123"), "A_B_C_123");
+        assert_eq!(sanitize_id("plain-id"), "plain-id");
+    }
+}
