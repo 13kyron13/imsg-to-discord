@@ -20,5 +20,8 @@
   "dependencies": {
     "better-sqlite3": "^13.0.3",
     "discord.js": "^14.27.0"
+  },
+  "engines": {
+    "node": ">=22 <25"
   }
 }
