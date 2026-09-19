@@ -272,3 +272,15 @@ npm test
 The suite checks JavaScript syntax, privacy behavior, normalized transport events, and the Linux NDJSON adapter using a local mock subprocess. It does not contact Apple or Discord.
 
 GitHub Actions tests Node.js 20 and 22 on every push to `main` and pull request.
+
+
+## Linux sidecar development
+
+The repository now contains a Rust sidecar under `linux-sidecar/`. It owns the future direct iMessage implementation while `src/transports/linux.js` remains the Node/Discord-facing process adapter.
+
+Current sidecar state:
+
+- NDJSON startup and request protocol implemented.
+- rustpush revision pinned behind the optional `direct-imessage` feature.
+- Real Apple authentication, registration, incoming-event handling, and sending are still in progress.
+- Rust formatting and compilation are checked by GitHub Actions.
