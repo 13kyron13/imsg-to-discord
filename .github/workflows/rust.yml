@@ -102,7 +102,7 @@ jobs:
 
       - name: Patch direct backend to the fetched rustpush source
         run: |
-          sed -i 's#rustpush = { git = "https://github.com/OpenBubbles/rustpush", rev = "f35c4ee062b3c3eae54dc96b89b90ee99f5e1d0c" }#rustpush = { path = "/tmp/rustpush" }#' linux-sidecar/direct-imessage/Cargo.toml
+          sed -i 's#rustpush = { git = "https://github.com/OpenBubbles/rustpush", rev = "f35c4ee062b3c3eae54dc96b89b90ee99f5e1d0c" }#rustpush = { path = "/tmp/rustpush", default-features = false, features = ["remote-anisette-v3"] }#' linux-sidecar/direct-imessage/Cargo.toml
           grep '^rustpush =' linux-sidecar/direct-imessage/Cargo.toml
 
       - name: Test direct Linux backend
