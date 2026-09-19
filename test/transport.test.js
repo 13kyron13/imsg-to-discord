@@ -9,6 +9,7 @@ test('normalizeMessage creates the stable internal shape', () => {
     sender: 789,
     chatName: null,
     isGroup: 1,
+    service: 'sms',
     text: 42,
     attachments: [
       { path: '/tmp/a.jpg', name: 123, mimeType: 'image/jpeg' },
@@ -23,6 +24,7 @@ test('normalizeMessage creates the stable internal shape', () => {
     sender: '789',
     chatName: null,
     isGroup: true,
+    service: 'sms',
     text: '',
     attachments: [
       { path: '/tmp/a.jpg', name: '123', mimeType: 'image/jpeg' },
@@ -37,6 +39,7 @@ test('normalizeMessage handles minimal events', () => {
     sender: null,
     chatName: null,
     isGroup: false,
+    service: null,
     text: '',
     attachments: [],
   });
