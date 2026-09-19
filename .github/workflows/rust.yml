@@ -105,7 +105,6 @@ jobs:
           sed -i 's#^rustpush =.*#rustpush = { path = "/tmp/rustpush", default-features = false, features = ["remote-anisette-v3"] }#' linux-sidecar/direct-imessage/Cargo.toml
           grep '^rustpush =' linux-sidecar/direct-imessage/Cargo.toml
           printf '\n[patch.crates-io]\nquinn = { path = "/tmp/rustpush/third_party/quinn/quinn" }\n' >> linux-sidecar/direct-imessage/Cargo.toml
-          cargo metadata --manifest-path linux-sidecar/direct-imessage/Cargo.toml --format-version 1 --locked >/dev/null
 
       - name: Test direct Linux backend
         run: cargo test --manifest-path linux-sidecar/direct-imessage/Cargo.toml --bin imsg-direct
