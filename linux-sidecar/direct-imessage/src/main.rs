@@ -497,7 +497,7 @@ async fn bridge() -> Result<()> {
     )
     .await;
 
-    let handles = client.identity.get_handles().await;
+    let mut handles = client.identity.get_handles().await;
     emit(&Event::Ready).await?;
     emit(&Event::Status { connected: true }).await?;
 
@@ -574,6 +574,12 @@ async fn bridge() -> Result<()> {
                                         }).await?;
                                     }
                                 }
+                            }
+                            Err(error) => {
+                                emit(&Event::Error {
+                                    error: format!("invalid request: {error}"),
+                                })
+                                .await?;
                             }
                         }
                     }
@@ -660,6 +666,7 @@ async fn bridge() -> Result<()> {
                 state_change?;
                 match resource_state.borrow_and_update().clone() {
                     ResourceState::Generated => {
+                        handles = client.identity.get_handles().await;
                         let current_push = connection.state.read().await.clone();
                         if let Ok(mut state) = state.lock() {
                             state.push = current_push;
