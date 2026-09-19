@@ -107,3 +107,10 @@ jobs:
 
       - name: Test direct Linux backend
         run: cargo test --manifest-path linux-sidecar/direct-imessage/Cargo.toml --bin imsg-direct
+
+      - name: Upload direct Linux backend
+        uses: actions/upload-artifact@v4
+        with:
+          name: imsg-direct-linux-x86_64
+          path: linux-sidecar/direct-imessage/target/debug/imsg-direct
+          if-no-files-found: error
