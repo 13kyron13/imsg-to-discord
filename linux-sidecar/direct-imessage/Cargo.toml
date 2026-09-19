@@ -14,7 +14,7 @@ serde_json = "1"
 sha2 = "0.10"
 tokio = { version = "1", features = ["io-std", "io-util", "macros", "rt-multi-thread", "sync"] }
 uuid = { version = "1", features = ["v4"] }
-rustpush = { git = "https://github.com/OpenBubbles/rustpush", rev = "f35c4ee062b3c3eae54dc96b89b90ee99f5e1d0c", default-features = false, features = ["remote-anisette-v3"] }
+rustpush = { git = "https://github.com/OpenBubbles/rustpush", rev = "f35c4ee062b3c3eae54dc96b89b90ee99f5e1d0c", default-features = false, features = ["macos-validation-data", "remote-anisette-v3"] }
 
 [[bin]]
 name = "imsg-direct"
