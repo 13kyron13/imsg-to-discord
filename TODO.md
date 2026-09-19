@@ -57,19 +57,19 @@ Legend:
 [x] Contact-name display.
 [ ] Add backend health command.
 [ ] Add startup status.
-[ ] Add retry/backoff.
+[x] Add retry/backoff.
 [ ] Improve formatting configuration.
 
 ## Reliability
-[ ] Structured logging.
-[ ] Graceful shutdown.
+[~] Structured logging.
+[x] Graceful shutdown.
 [ ] Health checks.
 [ ] Linux duplicate-event protection.
-[ ] Better persistent cursor handling.
-[ ] Transport reconnect.
-[ ] Fake transport integration tests.
-[ ] CI for syntax/tests.
-[ ] Linux x86_64 CI.
+[~] Better persistent cursor handling.
+[x] Transport reconnect.
+[x] Fake transport integration tests.
+[x] CI for syntax/tests.
+[x] Linux x86_64 CI.
 
 ## Security
 [x] Ignore local secrets/state.
@@ -96,3 +96,9 @@ Legend:
 [ ] Add optional separate settings for different chats.
 [ ] Add configurable auto-delete presets beyond seconds.
 [ ] Add attachment-specific privacy policy.
+
+## Cross-platform testing
+[x] Add privacy unit tests.
+[x] Add transport normalization tests.
+[x] Add Linux NDJSON transport integration test.
+[x] Add GitHub Actions CI for Node 20 and 22.
