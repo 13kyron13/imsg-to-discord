@@ -1,8 +1,6 @@
-<<<<<<< HEAD
+
 # iMessage to Discord
 =======
-# imsg-to-discord
->>>>>>> bcd3399 (Forward attachments to Discord)
 
 Forward incoming iMessages and SMS from a Mac to a private Discord channel, get pinged when they arrive, and reply straight from Discord.
 
