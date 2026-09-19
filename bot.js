@@ -363,7 +363,19 @@ async function registerCommands() {
     STATUS_COMMAND.toJSON(),
   ];
 
-  await channel.guild.commands.set(commands);
+  const existing = await channel.guild.commands.fetch();
+
+  for (const commandData of commands) {
+    const existingCommand = existing.find(
+      command => command.name === commandData.name
+    );
+
+    if (existingCommand) {
+      await existingCommand.edit(commandData);
+    } else {
+      await channel.guild.commands.create(commandData);
+    }
+  }
 }
 
 function interactionIsOwner(interaction) {
