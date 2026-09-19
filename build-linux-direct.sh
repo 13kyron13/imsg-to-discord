@@ -75,6 +75,7 @@ cp "$ROOT/linux-sidecar/direct-imessage/Cargo.toml" "$DIRECT_DIR/Cargo.toml"
 cp -R "$ROOT/linux-sidecar/direct-imessage/src/." "$DIRECT_DIR/src/"
 
 sed -i "s#rustpush = { git = \"https://github.com/OpenBubbles/rustpush\", rev = \"$RUSTPUSH_REV\" }#rustpush = { path = \"$RUSTPUSH_DIR\" }#" "$DIRECT_DIR/Cargo.toml"
+printf '\n[patch.crates-io]\nquinn = { path = "'$RUSTPUSH_DIR'/third_party/quinn/quinn" }\n' >> "$DIRECT_DIR/Cargo.toml"
 
 echo "Building direct Linux iMessage backend..."
 cargo build --manifest-path "$DIRECT_DIR/Cargo.toml" --release
