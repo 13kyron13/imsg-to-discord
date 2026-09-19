@@ -37,7 +37,7 @@ Legend:
 [x] Add systemd user startup.
 [~] Define stable backend event schema.
 [ ] Integrate a real direct-iMessage Linux backend.
-[ ] Integrate rustpush.
+[~] Design rustpush sidecar integration.
 [ ] Import/enrich Intel Mac hardware key.
 [ ] Add x86_64 NAC validation.
 [ ] Add Apple ID / 2FA provisioning.
@@ -55,7 +55,7 @@ Legend:
 [x] Reply routing.
 [x] Attachment forwarding.
 [x] Contact-name display.
-[ ] Add backend health command.
+[x] Add backend health command.
 [ ] Add startup status.
 [x] Add retry/backoff.
 [ ] Improve formatting configuration.
@@ -102,3 +102,15 @@ Legend:
 [x] Add transport normalization tests.
 [x] Add Linux NDJSON transport integration test.
 [x] Add GitHub Actions CI for Node 20 and 22.
+
+## Linux rustpush integration
+[~] Add dedicated Rust sidecar instead of using rustpush test executable.
+[x] Document the current upstream API/integration boundary.
+[ ] Pin a known-good rustpush revision.
+[ ] Implement hardware-config import.
+[ ] Implement persistent Apple authentication state.
+[ ] Implement 2FA provisioning flow.
+[ ] Bridge incoming IMClient events to NDJSON.
+[ ] Bridge NDJSON send requests to IMClient.
+[ ] Add attachment transfer.
+[ ] End-to-end test on x86_64 Linux.
