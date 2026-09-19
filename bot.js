@@ -1,259 +1,140 @@
-// imsg-to-discord: forwards incoming Messages (iMessage/SMS) on a Mac to a Discord channel,
-// including photos and other attachments, and sends your Discord replies back through Messages.
-// Setup instructions are in README.md.
-
-const { Client, GatewayIntentBits } = require('discord.js');
-const Database = require('better-sqlite3');
-const { execFile } = require('child_process');
-const { promisify } = require('util');
+const {
+  Client,
+  GatewayIntentBits,
+  SlashCommandBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+} = require('discord.js');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
-
-const execFileAsync = promisify(execFile);
+const MacOSTransport = require('./src/transports/macos');
+const LinuxTransport = require('./src/transports/linux');
+const {
+  DEFAULT_SETTINGS,
+  DELETE_MODES,
+  MIN_DELETE_SECONDS,
+  MAX_DELETE_SECONDS,
+  normalizeSettings,
+  formatIncomingContent,
+  shouldUploadAttachments,
+  settingsSummary,
+} = require('./src/privacy');
 
 const { DISCORD_TOKEN, CHANNEL_ID, OWNER_ID } = process.env;
+
 if (!DISCORD_TOKEN || !CHANNEL_ID || !OWNER_ID) {
-  console.error('Missing DISCORD_TOKEN, CHANNEL_ID or OWNER_ID. Copy .env.example to .env and fill it in.');
+  console.error('Missing DISCORD_TOKEN, CHANNEL_ID or OWNER_ID. Copy .env.example to .env.');
   process.exit(1);
 }
 
-const CHAT_DB = path.join(os.homedir(), 'Library/Messages/chat.db');
-const ATTACH_DIR = path.join(os.homedir(), 'Library/Messages/Attachments');
 const STATE_FILE = path.join(__dirname, 'state.json');
 const CONTACTS_FILE = path.join(__dirname, 'contacts.json');
-
-// Discord's upload limit is about 10 MB on a normal server. Raise it in .env
-// (MAX_UPLOAD_MB=25, for example) if your server allows bigger uploads.
 const MAX_UPLOAD_BYTES = (Number(process.env.MAX_UPLOAD_MB) || 9.5) * 1024 * 1024;
-const MAX_FILES_PER_MESSAGE = 10;
 
-// ---------- contacts (automatically read from macOS Contacts) ----------
-
-// Normalize phone numbers so different formatting still matches.
-// Examples:
-//   "0412 345 678"    -> "61412345678"
-//   "+61 412 345 678" -> "61412345678"
-//   "0412345678"      -> "61412345678"
-function clean(s) {
-  if (!s) return '';
-
-  let number = String(s).replace(/\D/g, '');
-
-  // Australian local number -> international format
-  if (number.startsWith('0') && number.length === 10) {
-    number = '61' + number.slice(1);
-  }
-
-  return number;
-}
-
-// Contacts are cached for 60 seconds so we don't repeatedly query
-// the entire macOS Contacts database for every incoming message.
-let contactsCache = {};
-let contactsCacheTime = 0;
-
-async function loadContacts() {
-  const now = Date.now();
-
-  if (now - contactsCacheTime < 60000) {
-    return contactsCache;
-  }
-
-  const script = `
-tell application "Contacts"
-    set output to {}
-    repeat with p in people
-        set personName to name of p
-
-        repeat with ph in phones of p
-            set phoneNumber to value of ph
-            set end of output to phoneNumber & "\\t" & personName
-        end repeat
-    end repeat
-
-    set AppleScript's text item delimiters to linefeed
-    return output as text
-end tell
-`;
-
-  try {
-    const { stdout } = await execFileAsync('osascript', ['-e', script]);
-
-    const contacts = {};
-
-    for (const line of stdout.trim().split('\\n')) {
-      const tab = line.indexOf('\\t');
-
-      if (tab === -1) continue;
-
-      const number = clean(line.slice(0, tab));
-      const name = line.slice(tab + 1).trim();
-
-      if (number && name) {
-        contacts[number] = name;
-      }
-    }
-
-    contactsCache = contacts;
-    contactsCacheTime = now;
-
-    console.log(`Loaded ${Object.keys(contacts).length} phone numbers from Contacts.`);
-
-    return contacts;
-  } catch (err) {
-    console.error('Could not read Contacts:', err.message);
-
-    // If Contacts temporarily fails, keep using the last successful cache.
-    return contactsCache;
-  }
-}
-
-// ---------- state (last message seen + which Discord message maps to which chat) ----------
 function loadState() {
   try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    const loaded = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+
+    return {
+      lastId: loaded.lastId ?? null,
+      replyMap: loaded.replyMap || {},
+      deleteMap: loaded.deleteMap || {},
+      settings: normalizeSettings(loaded.settings || DEFAULT_SETTINGS),
+      seenMessageIds: Array.isArray(loaded.seenMessageIds) ? loaded.seenMessageIds.map(String).slice(-1000) : [],
+    };
   } catch {
-    return { lastId: null, replyMap: {} };
+    return {
+      lastId: null,
+      replyMap: {},
+      deleteMap: {},
+      settings: { ...DEFAULT_SETTINGS },
+      seenMessageIds: [],
+    };
   }
 }
+
 const state = loadState();
+
 function saveState() {
   const keys = Object.keys(state.replyMap);
+
   if (keys.length > 500) {
-    for (const k of keys.slice(0, keys.length - 500)) delete state.replyMap[k];
-  }
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state));
-}
-
-// ---------- read Messages database ----------
-const db = new Database(CHAT_DB, { readonly: true, fileMustExist: true });
-
-if (state.lastId === null) {
-  // First run: start from "now" so old messages aren't dumped into Discord
-  state.lastId = db.prepare('SELECT MAX(ROWID) AS m FROM message').get().m || 0;
-  saveState();
-}
-
-const newMessages = db.prepare(`
-  SELECT m.ROWID AS id, m.text, m.attributedBody, m.cache_has_attachments AS att,
-         h.id AS sender, c.guid AS chat_guid, c.style AS chat_style, c.display_name AS chat_name
-  FROM message m
-  LEFT JOIN handle h ON m.handle_id = h.ROWID
-  LEFT JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
-  LEFT JOIN chat c ON c.ROWID = cmj.chat_id
-  WHERE m.ROWID > ? AND m.is_from_me = 0 AND m.associated_message_type = 0
-  ORDER BY m.ROWID
-`);
-
-const attachmentsFor = db.prepare(`
-  SELECT a.filename, a.mime_type, a.transfer_name
-  FROM attachment a
-  JOIN message_attachment_join maj ON maj.attachment_id = a.ROWID
-  WHERE maj.message_id = ?
-  ORDER BY a.ROWID
-`);
-
-// Newer macOS often stores the text inside attributedBody instead of text
-function decodeBody(buf) {
-  if (!buf) return null;
-  const marker = buf.indexOf('NSString');
-  if (marker === -1) return null;
-  let pos = marker + 'NSString'.length + 5;
-  let len = buf[pos];
-  if (len === 0x81) {
-    len = buf.readUInt16LE(pos + 1);
-    pos += 3;
-  } else if (len === 0x82) {
-    len = buf.readUInt32LE(pos + 1);
-    pos += 5;
-  } else {
-    pos += 1;
-  }
-  return buf.subarray(pos, pos + len).toString('utf8');
-}
-
-// ---------- attachments ----------
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// The database stores paths like "~/Library/Messages/Attachments/...". Only allow files inside that folder.
-function resolveAttachmentPath(p) {
-  if (!p) return null;
-  const full = path.resolve(p.startsWith('~') ? path.join(os.homedir(), p.slice(1)) : p);
-  return full.startsWith(ATTACH_DIR + path.sep) ? full : null;
-}
-
-// Attachments can still be downloading when the message row appears.
-// Wait until the file exists and has stopped growing.
-async function waitForFile(file, tries = 10) {
-  let lastSize = -1;
-  for (let i = 0; i < tries; i++) {
-    try {
-      const size = fs.statSync(file).size;
-      if (size > 0 && size === lastSize) return size;
-      lastSize = size;
-    } catch {
-      lastSize = -1;
-    }
-    await sleep(1000);
-  }
-  return null;
-}
-
-// Returns files ready to upload plus short notes for anything that couldn't be uploaded.
-// Any temporary converted files are added to tempFiles so the caller can delete them.
-async function prepareAttachments(messageId, tempFiles) {
-  const files = [];
-  const notes = [];
-  let total = 0;
-
-  for (const a of attachmentsFor.all(messageId)) {
-    // Skip link-preview data; it isn't a real attachment
-    if (!a.filename || a.filename.endsWith('.pluginPayloadAttachment')) continue;
-
-    const name = a.transfer_name || path.basename(a.filename);
-    let file = resolveAttachmentPath(a.filename);
-    if (!file) {
-      notes.push(`[${name}: unavailable]`);
-      continue;
-    }
-
-    const size = await waitForFile(file);
-    if (!size) {
-      notes.push(`[${name}: hasn't downloaded to the Mac]`);
-      continue;
-    }
-
-    // iPhone photos are usually HEIC, which Discord can't preview. Convert to JPEG with macOS's built-in sips.
-    let uploadName = name;
-    const isHeic = /\.hei[cf]s?$/i.test(file) || /image\/hei[cf]/i.test(a.mime_type || '');
-    if (isHeic) {
-      const out = path.join(os.tmpdir(), `imsg-${messageId}-${files.length}.jpg`);
-      try {
-        await execFileAsync('sips', ['-s', 'format', 'jpeg', file, '--out', out]);
-        tempFiles.push(out);
-        file = out;
-        uploadName = name.replace(/\.[^.]+$/, '') + '.jpg';
-      } catch (err) {
-        console.error('HEIC conversion failed, uploading original:', err.message);
-      }
-    }
-
-    const finalSize = fs.statSync(file).size;
-    if (files.length >= MAX_FILES_PER_MESSAGE) {
-      notes.push(`[${name}: over the ${MAX_FILES_PER_MESSAGE}-file limit]`);
-    } else if (total + finalSize > MAX_UPLOAD_BYTES) {
-      notes.push(`[${name}: too large for Discord (${(finalSize / 1048576).toFixed(1)} MB)]`);
-    } else {
-      total += finalSize;
-      files.push({ attachment: file, name: uploadName });
+    for (const key of keys.slice(0, keys.length - 500)) {
+      delete state.replyMap[key];
+      delete state.deleteMap[key];
     }
   }
 
-  return { files, notes };
+  state.seenMessageIds = state.seenMessageIds.slice(-1000);
+  const tempFile = STATE_FILE + '.tmp';
+  fs.writeFileSync(tempFile, JSON.stringify(state, null, 2), { mode: 0o600 });
+  fs.chmodSync(tempFile, 0o600);
+  fs.renameSync(tempFile, STATE_FILE);
+  fs.chmodSync(STATE_FILE, 0o600);
 }
 
-// ---------- Discord ----------
+function loadLocalContacts() {
+  try {
+    return JSON.parse(fs.readFileSync(CONTACTS_FILE, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function contactName(value) {
+  if (!value) return value;
+
+  const contacts = loadLocalContacts();
+  const raw = String(value);
+  const digits = raw.replace(/\D/g, '');
+
+  for (const [number, name] of Object.entries(contacts)) {
+    if (String(number).replace(/\D/g, '') === digits) {
+      return name;
+    }
+  }
+
+  return raw;
+}
+
+function createTransport() {
+  const requested = (process.env.MESSAGE_BACKEND || 'auto').toLowerCase();
+
+  const backend = requested === 'auto'
+    ? (
+        process.platform === 'darwin'
+          ? 'macos'
+          : process.platform === 'linux'
+            ? 'linux'
+            : 'unsupported'
+      )
+    : requested;
+
+  if (backend === 'macos') {
+    return new MacOSTransport({
+      state,
+      onStateChange: saveState,
+    });
+  }
+
+  if (backend === 'linux') {
+    return new LinuxTransport();
+  }
+
+  throw new Error(
+    'Unsupported message backend: ' +
+    backend +
+    '. Supported backends are macos and linux.'
+  );
+}
+
+const transport = createTransport();
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -262,99 +143,527 @@ const client = new Client({
   ],
 });
 
-let polling = false;
-async function poll() {
-  if (polling) return;
-  polling = true;
-  try {
-    const rows = newMessages.all(state.lastId);
-    if (rows.length) {
-      const contacts = await loadContacts();
-      const channel = await client.channels.fetch(CHANNEL_ID);
-      for (const r of rows) {
-        const tempFiles = [];
-        try {
-          const text = (r.text || decodeBody(r.attributedBody) || '').replace(/\uFFFC/g, '').trim();
+const SETTINGS_COMMAND = new SlashCommandBuilder()
+  .setName('imsg-settings')
+  .setDescription('Configure iMessage privacy and Discord deletion behavior')
+  .addStringOption(option => option
+    .setName('visibility')
+    .setDescription('Show message contents or only a notification')
+    .addChoices(
+      { name: 'Show message', value: 'full' },
+      { name: 'Notification only', value: 'notification' },
+    ))
+  .addBooleanOption(option => option
+    .setName('hide_contact')
+    .setDescription('Hide the sender/contact name in Discord'))
+  .addStringOption(option => option
+    .setName('delete_mode')
+    .setDescription('What to do with forwarded Discord messages')
+    .addChoices(
+      { name: 'Keep messages', value: 'keep' },
+      { name: 'Delete with a button', value: 'button' },
+      { name: 'Auto-delete after a timer', value: 'timer' },
+    ))
+  .addIntegerOption(option => option
+    .setName('delete_after')
+    .setDescription('Auto-delete delay in seconds (5-86400)')
+    .setMinValue(MIN_DELETE_SECONDS)
+    .setMaxValue(MAX_DELETE_SECONDS));
 
-          let files = [];
-          let notes = [];
-          if (r.att) ({ files, notes } = await prepareAttachments(r.id, tempFiles));
+const STATUS_COMMAND = new SlashCommandBuilder()
+  .setName('imsg-status')
+  .setDescription('Show iMessage bridge and Discord backend status');
 
-          let body = [text, ...notes].filter(Boolean).join('\n');
-          if (!body) {
-            body = files.length
-              ? `(${files.length} attachment${files.length > 1 ? 's' : ''})`
-              : '[unsupported message]';
-          }
+function settingsDescription() {
+  const summary = settingsSummary(state.settings);
 
-          const name = contacts[clean(r.sender)] || r.sender || 'Unknown';
-          const isGroup = r.chat_style === 43;
-          const header = isGroup
-            ? `**${name}** in *${r.chat_name || 'group chat'}*`
-            : `**${name}**`;
-          const content = `<@${OWNER_ID}> ${header}: ${body}`.slice(0, 1900);
+  return [
+    '**Visibility:** ' + summary.visibility,
+    '**Contact:** ' + summary.contact,
+    '**Deletion:** ' + summary.deletion,
+    '',
+    'These settings affect newly forwarded iMessages.',
+    'Deleting a Discord copy does not delete the original iMessage.',
+  ].join('\n');
+}
 
-          // Only the owner can be pinged; @everyone etc. inside a text is ignored
-          const allowedMentions = { users: [OWNER_ID] };
+function settingsPanel() {
+  const embed = new EmbedBuilder()
+    .setTitle('iMessage privacy settings')
+    .setDescription(settingsDescription())
+    .setFooter({
+      text: 'Only the configured owner can change these settings.',
+    });
 
-          let sent;
-          try {
-            sent = await channel.send({ content, files, allowedMentions });
-          } catch (err) {
-            if (!files.length) throw err;
-            // Upload failed (too big, network, etc.): still deliver the text
-            console.error('Upload failed:', err.message);
-            sent = await channel.send({
-              content: `${content}\n[attachment upload failed]`.slice(0, 1900),
-              allowedMentions,
-            });
-          }
+  const visibilityButton = new ButtonBuilder()
+    .setCustomId('imsg:settings:visibility')
+    .setLabel(
+      state.settings.visibility === 'notification'
+        ? 'Show contents'
+        : 'Notification only'
+    )
+    .setStyle(
+      state.settings.visibility === 'notification'
+        ? ButtonStyle.Success
+        : ButtonStyle.Secondary
+    );
 
-          if (r.chat_guid) state.replyMap[sent.id] = r.chat_guid;
-          state.lastId = r.id;
-          saveState();
-        } finally {
-          for (const f of tempFiles) fs.unlink(f, () => {});
-        }
+  const senderButton = new ButtonBuilder()
+    .setCustomId('imsg:settings:sender')
+    .setLabel(state.settings.hideSender ? 'Show contact' : 'Hide contact')
+    .setStyle(
+      state.settings.hideSender
+        ? ButtonStyle.Success
+        : ButtonStyle.Secondary
+    );
+
+  const deletionButton = new ButtonBuilder()
+    .setCustomId('imsg:settings:delete')
+    .setLabel('Cycle deletion mode')
+    .setStyle(ButtonStyle.Primary);
+
+  const timerButton = new ButtonBuilder()
+    .setCustomId('imsg:settings:timer')
+    .setLabel('Set timer')
+    .setStyle(ButtonStyle.Secondary);
+
+  const refreshButton = new ButtonBuilder()
+    .setCustomId('imsg:settings:refresh')
+    .setLabel('Refresh')
+    .setStyle(ButtonStyle.Secondary);
+
+  return {
+    embeds: [embed],
+    components: [
+      new ActionRowBuilder().addComponents(visibilityButton, senderButton),
+      new ActionRowBuilder().addComponents(
+        deletionButton,
+        timerButton,
+        refreshButton
+      ),
+    ],
+  };
+}
+
+function deleteButtonRow(messageId) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('imsg:delete:' + messageId)
+        .setLabel('Delete Discord copy')
+        .setStyle(ButtonStyle.Danger)
+    ),
+  ];
+}
+
+async function pollAttachments(message) {
+  const files = [];
+
+  for (const attachment of message.attachments || []) {
+    try {
+      const stat = fs.statSync(attachment.path);
+
+      if (files.length >= 10 || stat.size > MAX_UPLOAD_BYTES) {
+        continue;
       }
+
+      files.push({
+        attachment: attachment.path,
+        name: attachment.name,
+      });
+    } catch {
+      // The backend may have reported a file that disappeared during upload.
     }
-  } catch (err) {
-    console.error('Poll error:', err.message);
-  } finally {
-    polling = false;
+  }
+
+  return files;
+}
+
+function scheduleDelete(messageId, channel, at) {
+  const delay = Math.max(0, at - Date.now());
+
+  setTimeout(async () => {
+    try {
+      const message = await channel.messages.fetch(messageId);
+      await message.delete();
+    } catch (err) {
+      if (err?.code !== 10008) {
+        console.error('Scheduled delete failed:', err.message);
+      }
+    } finally {
+      delete state.replyMap[messageId];
+      delete state.deleteMap[messageId];
+      saveState();
+    }
+  }, delay);
+}
+
+async function restoreScheduledDeletes(channel) {
+  for (const [messageId, at] of Object.entries(state.deleteMap)) {
+    scheduleDelete(messageId, channel, Number(at));
   }
 }
 
-// ---------- send via Messages (AppleScript) ----------
-const SEND_SCRIPT = `on run argv
-  tell application "Messages"
-    send (item 2 of argv) to chat id (item 1 of argv)
-  end tell
-end run`;
-
-client.on('messageCreate', async (msg) => {
-  // Only you, only in your channel
-  if (msg.author.bot || msg.channelId !== CHANNEL_ID || msg.author.id !== OWNER_ID) return;
-
-  const refId = msg.reference && msg.reference.messageId;
-  const guid = refId && state.replyMap[refId];
-  if (!guid) {
-    await msg.reply({
-      content: "Use Discord's Reply on one of the forwarded messages so I know who to send to.",
-      allowedMentions: { repliedUser: false },
-    });
+async function handleIncoming(message) {
+  const messageId = String(message.id);
+  if (state.seenMessageIds.includes(messageId)) {
     return;
   }
 
-  execFile('osascript', ['-e', SEND_SCRIPT, guid, msg.content], (err, _stdout, stderr) => {
-    if (err) console.error('Send error:', stderr || err.message);
-    msg.react(err ? '❌' : '✅').catch(() => {});
+  const channel = await client.channels.fetch(CHANNEL_ID);
+
+  const files = shouldUploadAttachments(state.settings)
+    ? await pollAttachments(message)
+    : [];
+
+  const content = formatIncomingContent(
+    message,
+    files,
+    state.settings,
+    OWNER_ID,
+    contactName(message.sender)
+  );
+
+  const sent = await channel.send({
+    content: content.slice(0, 1900),
+    files,
+    allowedMentions: {
+      users: [OWNER_ID],
+    },
   });
+
+  if (message.chatId) {
+    state.replyMap[sent.id] = message.chatId;
+  }
+
+  if (state.settings.deleteMode === 'button') {
+    await sent.edit({
+      components: deleteButtonRow(sent.id),
+    });
+  } else if (state.settings.deleteMode === 'timer') {
+    const deleteAt =
+      Date.now() + state.settings.deleteAfterSeconds * 1000;
+
+    state.deleteMap[sent.id] = deleteAt;
+    scheduleDelete(sent.id, channel, deleteAt);
+  }
+
+  state.seenMessageIds.push(messageId);
+  saveState();
+}
+
+function backendStatus() {
+  if (typeof transport.status === 'function') {
+    return transport.status();
+  }
+
+  return {
+    backend: process.env.MESSAGE_BACKEND || 'auto',
+    connected: true,
+    details: 'Transport does not expose detailed status.',
+  };
+}
+
+async function registerCommands() {
+  const channel = await client.channels.fetch(CHANNEL_ID);
+
+  if (!channel.guild) {
+    throw new Error('Configured CHANNEL_ID is not inside a Discord server.');
+  }
+
+  const commands = [
+    SETTINGS_COMMAND.toJSON(),
+    STATUS_COMMAND.toJSON(),
+  ];
+
+  const existing = await channel.guild.commands.fetch();
+
+  for (const commandData of commands) {
+    const existingCommand = existing.find(
+      command => command.name === commandData.name
+    );
+
+    if (existingCommand) {
+      await existingCommand.edit(commandData);
+    } else {
+      await channel.guild.commands.create(commandData);
+    }
+  }
+}
+
+function interactionIsOwner(interaction) {
+  return interaction.user.id === OWNER_ID &&
+    interaction.channelId === CHANNEL_ID;
+}
+
+client.on('interactionCreate', async interaction => {
+  if (!interactionIsOwner(interaction)) {
+    if (interaction.isRepliable()) {
+      await interaction.reply({
+        content:
+          'This iMessage bot is restricted to its configured owner and channel.',
+        ephemeral: true,
+      }).catch(() => {});
+    }
+
+    return;
+  }
+
+  if (
+    interaction.isChatInputCommand() &&
+    interaction.commandName === 'imsg-settings'
+  ) {
+    const visibility = interaction.options.getString('visibility');
+    const hideContact = interaction.options.getBoolean('hide_contact');
+    const deleteMode = interaction.options.getString('delete_mode');
+    const deleteAfter = interaction.options.getInteger('delete_after');
+
+    if (visibility) {
+      state.settings.visibility =
+        visibility === 'notification' ? 'notification' : 'full';
+    }
+
+    if (hideContact !== null) {
+      state.settings.hideSender = Boolean(hideContact);
+    }
+
+    if (deleteMode) {
+      state.settings.deleteMode =
+        DELETE_MODES.includes(deleteMode) ? deleteMode : 'keep';
+    }
+
+    if (deleteAfter !== null) {
+      state.settings.deleteAfterSeconds = Math.min(
+        MAX_DELETE_SECONDS,
+        Math.max(MIN_DELETE_SECONDS, deleteAfter)
+      );
+      state.settings.deleteMode = 'timer';
+    }
+
+    state.settings = normalizeSettings(state.settings);
+    saveState();
+
+    await interaction.reply({
+      ...settingsPanel(),
+      ephemeral: true,
+    });
+
+    return;
+  }
+
+  if (
+    interaction.isChatInputCommand() &&
+    interaction.commandName === 'imsg-status'
+  ) {
+    const status = backendStatus();
+
+    const embed = new EmbedBuilder()
+      .setTitle('iMessage bridge status')
+      .addFields(
+        {
+          name: 'Discord',
+          value: client.ws.status === 0 ? 'Connected' : 'Connecting / degraded',
+          inline: true,
+        },
+        {
+          name: 'Backend',
+          value: String(status.backend || 'unknown'),
+          inline: true,
+        },
+        {
+          name: 'Transport',
+          value: status.connected ? 'Connected' : 'Offline / reconnecting',
+          inline: true,
+        }
+      )
+      .setDescription(status.details || 'No additional status information.');
+
+    await interaction.reply({
+      embeds: [embed],
+      ephemeral: true,
+    });
+
+    return;
+  }
+
+  if (interaction.isButton()) {
+    if (interaction.customId === 'imsg:settings:visibility') {
+      state.settings.visibility =
+        state.settings.visibility === 'full'
+          ? 'notification'
+          : 'full';
+
+      saveState();
+      await interaction.update(settingsPanel());
+      return;
+    }
+
+    if (interaction.customId === 'imsg:settings:sender') {
+      state.settings.hideSender = !state.settings.hideSender;
+      saveState();
+      await interaction.update(settingsPanel());
+      return;
+    }
+
+    if (interaction.customId === 'imsg:settings:delete') {
+      const index = DELETE_MODES.indexOf(state.settings.deleteMode);
+
+      state.settings.deleteMode =
+        DELETE_MODES[(index + 1) % DELETE_MODES.length];
+
+      saveState();
+      await interaction.update(settingsPanel());
+      return;
+    }
+
+    if (interaction.customId === 'imsg:settings:timer') {
+      const modal = new ModalBuilder()
+        .setCustomId('imsg:settings:timer-modal')
+        .setTitle('Set auto-delete timer');
+
+      const input = new TextInputBuilder()
+        .setCustomId('seconds')
+        .setLabel('Seconds before the Discord copy is deleted')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('60')
+        .setValue(String(state.settings.deleteAfterSeconds))
+        .setRequired(true);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(input)
+      );
+
+      await interaction.showModal(modal);
+      return;
+    }
+
+    if (interaction.customId === 'imsg:settings:refresh') {
+      await interaction.update(settingsPanel());
+      return;
+    }
+
+    if (interaction.customId.startsWith('imsg:delete:')) {
+      const messageId =
+        interaction.customId.slice('imsg:delete:'.length);
+
+      if (interaction.message.id !== messageId) {
+        return;
+      }
+
+      delete state.replyMap[messageId];
+      delete state.deleteMap[messageId];
+      saveState();
+
+      await interaction.deferUpdate();
+
+      await interaction.message.delete().catch(err => {
+        if (err?.code !== 10008) {
+          console.error('Button delete failed:', err.message);
+        }
+      });
+
+      return;
+    }
+  }
+
+  if (
+    interaction.isModalSubmit() &&
+    interaction.customId === 'imsg:settings:timer-modal'
+  ) {
+    const seconds =
+      Number(interaction.fields.getTextInputValue('seconds'));
+
+    if (
+      !Number.isInteger(seconds) ||
+      seconds < MIN_DELETE_SECONDS ||
+      seconds > MAX_DELETE_SECONDS
+    ) {
+      await interaction.reply({
+        content:
+          'Enter a whole number from ' +
+          MIN_DELETE_SECONDS +
+          ' to ' +
+          MAX_DELETE_SECONDS +
+          ' seconds.',
+        ephemeral: true,
+      });
+
+      return;
+    }
+
+    state.settings.deleteAfterSeconds = seconds;
+    state.settings.deleteMode = 'timer';
+    saveState();
+
+    await interaction.reply({
+      ...settingsPanel(),
+      ephemeral: true,
+    });
+  }
 });
 
-client.once('clientReady', () => {
-  console.log(`Logged in as ${client.user.tag}. Watching Messages...`);
-  setInterval(poll, 2000);
+client.on('messageCreate', async msg => {
+  if (
+    msg.author.bot ||
+    msg.channelId !== CHANNEL_ID ||
+    msg.author.id !== OWNER_ID
+  ) {
+    return;
+  }
+
+  const refId = msg.reference && msg.reference.messageId;
+  const chatId = refId && state.replyMap[refId];
+
+  if (!chatId) {
+    await msg.reply({
+      content:
+        "Use Discord's Reply on one of the forwarded messages so I know who to send to.",
+      allowedMentions: {
+        repliedUser: false,
+      },
+    });
+
+    return;
+  }
+
+  try {
+    await transport.sendText(chatId, msg.content);
+    await msg.react('✅');
+  } catch (err) {
+    console.error('Send error:', err.message);
+    await msg.react('❌').catch(() => {});
+  }
 });
+
+client.once('clientReady', async () => {
+  console.log(
+    'Logged in as ' +
+    client.user.tag +
+    '. Backend: ' +
+    (process.env.MESSAGE_BACKEND || 'auto')
+  );
+
+  try {
+    await registerCommands();
+
+    const channel = await client.channels.fetch(CHANNEL_ID);
+    await restoreScheduledDeletes(channel);
+  } catch (err) {
+    console.error(
+      'Discord command/deletion setup failed:',
+      err.message
+    );
+  }
+
+  await transport.start(handleIncoming);
+});
+
+async function shutdown() {
+  await transport.close().catch(() => {});
+  client.destroy();
+}
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
 client.login(DISCORD_TOKEN);

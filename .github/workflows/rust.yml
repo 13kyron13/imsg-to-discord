@@ -1,0 +1,138 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-sidecar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install system build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Configure public Git dependencies
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global url."https://github.com/OpenBubbles/".insteadOf "git@github.com:OpenBubbles/"
+          git config --global url."https://github.com/OpenBubbles/".insteadOf "ssh://git@github.com/OpenBubbles/"
+          git config --global protocol.version 2
+
+      - name: Check stable sidecar formatting
+        run: cargo fmt --manifest-path linux-sidecar/Cargo.toml -- --check
+
+      - name: Check direct backend formatting
+        run: cargo fmt --manifest-path linux-sidecar/direct-imessage/Cargo.toml -- --check
+
+      - name: Check direct backend manifest
+        run: cargo metadata --manifest-path linux-sidecar/direct-imessage/Cargo.toml --no-deps --format-version 1
+
+      - name: Check Linux sidecar
+        env:
+          CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+        run: cargo check --manifest-path linux-sidecar/Cargo.toml
+
+  direct-imessage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v7
+
+      - name: Install system build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Configure public Git dependencies
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global protocol.version 2
+
+      - name: Fetch pinned rustpush with submodules
+        env:
+          RUSTPUSH_REV: f35c4ee062b3c3eae54dc96b89b90ee99f5e1d0c
+        run: |
+          git clone https://github.com/OpenBubbles/rustpush.git /tmp/rustpush
+          git -C /tmp/rustpush fetch --no-tags origin "$RUSTPUSH_REV"
+          git -C /tmp/rustpush checkout --detach "$RUSTPUSH_REV"
+          sed -i 's#git@github.com:#https://github.com/#g' /tmp/rustpush/.gitmodules
+          git -C /tmp/rustpush submodule sync
+          git -C /tmp/rustpush submodule update --init
+          git -C /tmp/rustpush submodule foreach '
+            if [ -f .gitmodules ]; then
+              sed -i "s#git@github.com:#https://github.com/#g" .gitmodules
+              git submodule sync
+            fi
+          '
+          git -C /tmp/rustpush submodule sync --recursive
+          git -C /tmp/rustpush submodule update --init --recursive
+          git -C /tmp/rustpush submodule foreach --recursive '
+            if [ -f .gitmodules ]; then
+              sed -i "s#git@github.com:#https://github.com/#g" .gitmodules
+              git submodule sync --recursive
+            fi
+          '
+          git -C /tmp/rustpush submodule update --init --recursive
+
+      - name: Prepare rustpush FairPlay build assets
+        run: |
+          mkdir -p /tmp/rustpush/certs/fairplay
+          for name in \
+            4056631661436364584235346952193 \
+            4056631661436364584235346952194 \
+            4056631661436364584235346952195 \
+            4056631661436364584235346952196 \
+            4056631661436364584235346952197 \
+            4056631661436364584235346952198 \
+            4056631661436364584235346952199 \
+            4056631661436364584235346952200 \
+            4056631661436364584235346952201 \
+            4056631661436364584235346952208; do
+            cp /tmp/rustpush/certs/legacy-fairplay/fairplay.pem /tmp/rustpush/certs/fairplay/"$name.pem"
+            cp /tmp/rustpush/certs/legacy-fairplay/fairplay.crt /tmp/rustpush/certs/fairplay/"$name.crt"
+          done
+
+      - name: Patch direct backend to the fetched rustpush source
+        run: |
+          sed -i 's#^rustpush =.*#rustpush = { path = "/tmp/rustpush", default-features = false, features = ["macos-validation-data", "remote-anisette-v3"] }#' linux-sidecar/direct-imessage/Cargo.toml
+          grep '^rustpush =' linux-sidecar/direct-imessage/Cargo.toml
+          printf '\n[patch.crates-io]\nquinn = { path = "/tmp/rustpush/third_party/quinn/quinn" }\n' >> linux-sidecar/direct-imessage/Cargo.toml
+
+      - name: Test direct Linux backend
+        run: cargo test --manifest-path linux-sidecar/direct-imessage/Cargo.toml --bin imsg-direct
+
+      - name: Build direct Linux backend artifact
+        run: cargo build --manifest-path linux-sidecar/direct-imessage/Cargo.toml --bin imsg-direct
+
+      - name: Upload direct Linux backend
+        uses: actions/upload-artifact@v4
+        with:
+          name: imsg-direct-linux-x86_64
+          path: linux-sidecar/direct-imessage/target/debug/imsg-direct
+          if-no-files-found: error

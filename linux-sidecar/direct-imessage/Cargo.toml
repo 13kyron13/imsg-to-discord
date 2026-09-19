@@ -1,0 +1,21 @@
+[package]
+name = "imsg-to-discord-direct-imessage"
+version = "0.1.0"
+edition = "2021"
+description = "Direct Linux x86_64 iMessage backend for imsg-to-discord"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+plist = "1.7"
+rpassword = "7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["io-std", "io-util", "macros", "rt-multi-thread", "sync"] }
+uuid = { version = "1", features = ["v4"] }
+rustpush = { git = "https://github.com/OpenBubbles/rustpush", rev = "f35c4ee062b3c3eae54dc96b89b90ee99f5e1d0c", default-features = false, features = ["macos-validation-data", "remote-anisette-v3"] }
+
+[[bin]]
+name = "imsg-direct"
+path = "src/main.rs"

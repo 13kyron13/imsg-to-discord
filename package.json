@@ -1,17 +1,27 @@
 {
-  "name": "discord-bridge",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "imsg-to-discord",
+  "version": "2.0.0",
+  "description": "Self-hosted iMessage/SMS to Discord bridge with macOS and Linux transport backends.",
+  "main": "bot.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --check bot.js && node --check src/transport.js && node --check src/privacy.js && node --check src/transports/macos.js && node --check src/transports/linux.js && node --test --test-concurrency=1 test/privacy.test.js test/transport.test.js test/linux-transport.test.js",
+    "start": "node --env-file=.env bot.js",
+    "test:unit": "node --test test/privacy.test.js test/transport.test.js"
   },
-  "keywords": [],
+  "keywords": [
+    "imessage",
+    "discord",
+    "macos",
+    "linux"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
     "better-sqlite3": "^13.0.3",
     "discord.js": "^14.27.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
