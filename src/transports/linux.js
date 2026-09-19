@@ -32,6 +32,7 @@ class LinuxTransport extends MessageTransport {
     this.onMessage = null;
     this.restartTimer = null;
     this.restartDelay = DEFAULT_RESTART_DELAY_MS;
+    this.backendConnected = false;
     this.rl = null;
   }
 
@@ -59,10 +60,14 @@ class LinuxTransport extends MessageTransport {
           Promise.resolve(this.onMessage?.(normalizeMessage(event.message)))
             .catch(err => console.error('[linux] incoming message handler failed:', err.message));
         } else if (event.event === 'error') {
-          console.error('[linux backend]', event.message || 'unknown error');
+          console.error('[linux backend]', event.error || event.message || 'unknown error');
         } else if (event.event === 'ready') {
+          this.backendConnected = true;
           this.restartDelay = DEFAULT_RESTART_DELAY_MS;
           console.log('[linux] backend reports ready');
+        } else if (event.event === 'status') {
+          this.backendConnected = Boolean(event.connected);
+          console.log('[linux] backend status:', this.backendConnected ? 'connected' : 'disconnected');
         }
       } catch (err) {
         console.error('[linux] invalid NDJSON from backend:', err.message);
@@ -76,6 +81,7 @@ class LinuxTransport extends MessageTransport {
     });
 
     child.on('exit', (code, signal) => {
+      this.backendConnected = false;
       this.child = null;
       if (this.rl) this.rl.close();
       this.rl = null;
@@ -111,18 +117,30 @@ class LinuxTransport extends MessageTransport {
   status() {
     return {
       backend: 'linux',
-      connected: Boolean(this.child && this.child.stdin.writable),
-      details: this.child
-        ? 'Local iMessage backend process is running.'
-        : this.restartTimer
-          ? 'Local iMessage backend is waiting to restart.'
-          : 'Local iMessage backend process is not running.',
+      connected: Boolean(
+        this.child &&
+        this.child.stdin.writable &&
+        this.backendConnected
+      ),
+      details: !this.child
+        ? (
+            this.restartTimer
+              ? 'Local iMessage backend is waiting to restart.'
+              : 'Local iMessage backend process is not running.'
+          )
+        : this.backendConnected
+          ? 'Local iMessage backend is connected.'
+          : 'Local iMessage backend process is running but iMessage is not connected yet.',
     };
   }
 
   async sendText(chatId, text) {
     if (!this.child || !this.child.stdin.writable) {
       throw new Error('Linux iMessage backend is not running');
+    }
+
+    if (!this.backendConnected) {
+      throw new Error('Linux iMessage backend is not connected');
     }
 
     const request = {
@@ -146,6 +164,8 @@ class LinuxTransport extends MessageTransport {
       this.rl.close();
       this.rl = null;
     }
+
+    this.backendConnected = false;
 
     if (this.child) {
       this.child.stdin.end();
