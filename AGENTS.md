@@ -84,3 +84,7 @@ Treat privacy settings as security-sensitive presentation policy.
 - Linux transport changes should include or update an NDJSON subprocess test.
 - Do not make tests require a live Apple Account, Discord token, Messages database, or hardware key.
 - CI intentionally tests the cross-platform layers without attempting real iMessage authentication.
+
+## State persistence
+
+state.json contains operational metadata and Discord privacy settings. Keep writes atomic and use restrictive local file permissions. Never store message bodies in state.json.
