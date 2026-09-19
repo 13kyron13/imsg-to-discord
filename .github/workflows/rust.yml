@@ -120,7 +120,7 @@ jobs:
 
       - name: Patch direct backend to the fetched rustpush source
         run: |
-          sed -i 's#^rustpush =.*#rustpush = { path = "/tmp/rustpush", default-features = false, features = ["remote-anisette-v3"] }#' linux-sidecar/direct-imessage/Cargo.toml
+          sed -i 's#^rustpush =.*#rustpush = { path = "/tmp/rustpush", default-features = false, features = ["macos-validation-data", "remote-anisette-v3"] }#' linux-sidecar/direct-imessage/Cargo.toml
           grep '^rustpush =' linux-sidecar/direct-imessage/Cargo.toml
           printf '\n[patch.crates-io]\nquinn = { path = "/tmp/rustpush/third_party/quinn/quinn" }\n' >> linux-sidecar/direct-imessage/Cargo.toml
 
