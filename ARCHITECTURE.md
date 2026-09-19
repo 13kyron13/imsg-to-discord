@@ -125,7 +125,7 @@ Linux:
        |
     Discord
 
-One-time provisioning is expected to use an Intel Mac hardware key. The Mac should not need to remain online for the Intel-key Linux path.
+One-time provisioning uses an Intel Mac hardware configuration. The Mac is not part of the long-running Linux bridge process. The direct crate persists the resulting IDS/APS state locally with restrictive permissions.
 
 Apple Silicon provisioning is outside the first Linux target.
 
@@ -173,6 +173,6 @@ The repository's tests use Node's built-in test runner and include privacy-polic
 
 `linux-sidecar/` is the Rust process boundary for the eventual direct Linux iMessage backend.
 
-The current sidecar implements the stable NDJSON process protocol and reports a clear error for send requests until a direct iMessage backend is integrated. The Node `LinuxTransport` process supervisor, not the sidecar, owns restart/backoff behavior.
+The current stable sidecar implements the NDJSON process protocol. The direct backend in `linux-sidecar/direct-imessage/` implements the real rustpush-backed authentication, receive, and text-send path. The Node `LinuxTransport` process supervisor, not the sidecar, owns restart/backoff behavior.
 
-The separate `linux-sidecar/direct-imessage/` crate is the integration workspace for the evaluated rustpush revision. Keeping it separate prevents the unfinished external dependency from breaking the stable protocol build.
+The separate `linux-sidecar/direct-imessage/` crate contains the direct backend. It has `provision` and `bridge` modes: provisioning authenticates the Apple Account and stores IDS/APS state; bridge mode runs the long-lived NDJSON service without requiring the Mac to remain online. Keeping this crate separate prevents rustpush's external Git submodules from breaking the stable protocol build.

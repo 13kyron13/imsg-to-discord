@@ -30,9 +30,9 @@ The current repository also contains an example/test executable, but it is not a
 
 Do not build the production Linux bridge by scraping the output of that test executable.
 
-## Proposed sidecar
+## Implemented direct backend
 
-Create a dedicated Rust integration crate under `linux-sidecar/direct-imessage/` that depends on rustpush and implements this repository's NDJSON contract.
+The repository now contains `linux-sidecar/direct-imessage/`. Its `provision` command imports the hardware configuration, performs Apple ID authentication and 2FA, registers the IDS identity, and persists APS/IDS state. Its `bridge` command starts IMClient, converts incoming messages to NDJSON, and sends replies through IMClient.
 
 ### Incoming event
 
@@ -76,7 +76,7 @@ Diagnostics must go to stderr. stdout is reserved for machine-readable NDJSON.
 
 ## Provisioning
 
-The current Rustpush ecosystem documents Linux x86_64 operation using hardware information extracted from a Mac once. The enrichment path is also documented as x86_64 Linux-only.
+The direct implementation is intentionally x86_64-first. It loads the hardware configuration generated from an Intel Mac and uses the persisted Linux-side IDS/APS state for normal bridge operation.
 
 The project target here is therefore:
 
@@ -113,12 +113,12 @@ The sidecar must:
 
 - [x] Create stable Rust sidecar crate.
 - [x] Pin the evaluated rustpush revision in the direct integration crate.
-- [ ] Load imported hardware configuration.
-- [ ] Implement Apple authentication and persisted state.
-- [ ] Complete 2FA provisioning without placing credentials in command-line arguments.
-- [ ] Subscribe to incoming iMessage events.
-- [ ] Convert incoming messages to normalized NDJSON.
-- [ ] Implement text sends from NDJSON.
+- [x] Load imported hardware configuration.
+- [x] Implement Apple authentication and persisted state.
+- [x] Complete 2FA provisioning without placing credentials in command-line arguments.
+- [~] Subscribe to incoming iMessage events.
+- [~] Convert incoming messages to normalized NDJSON.
+- [~] Implement text sends from NDJSON.
 - [ ] Implement attachment download and local temporary-file handling.
 - [ ] Verify groups and SMS forwarding.
 - [ ] Add reconnect handling.

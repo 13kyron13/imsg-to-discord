@@ -52,7 +52,7 @@ Run:
 
 Use MESSAGE_BACKEND=macos, linux, or auto.
 
-Linux requires LINUX_IMESSAGE_COMMAND until a direct Linux iMessage backend is integrated.
+Linux requires LINUX_IMESSAGE_COMMAND pointing at a compatible backend. The repository now includes `linux-sidecar/direct-imessage/` as the direct rustpush-backed candidate.
 
 ## Important distinction
 
@@ -61,9 +61,10 @@ This repository contains the Discord bridge and transport abstraction. The low-l
 Do not confuse:
 - Linux transport interface exists
 - Linux can run the Discord bridge
-- Linux can directly authenticate to iMessage
+- the direct rustpush backend has a provision/bridge implementation
+- the direct backend has been end-to-end validated on real Linux hardware
 
-Only the first two are implemented by this repository today.
+The first three exist in source now. Real hardware and Apple-account end-to-end validation are still pending.
 
 
 ## Privacy controls
@@ -83,7 +84,7 @@ Treat privacy settings as security-sensitive presentation policy.
 - Keep privacy policy tests platform-independent under `test/`.
 - Linux transport changes should include or update an NDJSON subprocess test.
 - Do not make tests require a live Apple Account, Discord token, Messages database, or hardware key.
-- CI intentionally tests the cross-platform layers without attempting real iMessage authentication or downloading the unfinished rustpush dependency.
+- CI intentionally tests the cross-platform layers without attempting real iMessage authentication. The direct backend is excluded from CI until rustpush's external Git submodule can be built reproducibly in the project workflow.
 
 ## State persistence
 

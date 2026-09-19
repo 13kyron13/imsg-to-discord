@@ -36,14 +36,14 @@ Legend:
 [x] Add Linux contacts.json fallback.
 [x] Add systemd user startup.
 [~] Define stable backend event schema.
-[ ] Integrate a real direct-iMessage Linux backend.
-[~] Design direct Rust sidecar integration.
-[ ] Import/enrich Intel Mac hardware key.
+[~] Integrate the direct-iMessage Linux backend.
+[x] Design direct Rust sidecar integration.
+[x] Add hardware-config loading to the direct backend.
 [ ] Add x86_64 NAC validation.
-[ ] Add Apple ID / 2FA provisioning.
-[ ] Persist authentication state securely.
+[x] Add Apple ID / 2FA provisioning command.
+[x] Persist provisioned IDS/APS state with restrictive local permissions.
 [ ] Test incoming iMessages.
-[ ] Test outgoing replies.
+[~] Implement text replies through NDJSON.
 [ ] Test groups.
 [ ] Test attachments.
 [ ] Test SMS forwarding.
@@ -113,7 +113,7 @@ Legend:
 [ ] Bridge incoming IMClient events to NDJSON.
 [ ] Bridge NDJSON send requests to IMClient.
 [ ] Add attachment transfer.
-[ ] End-to-end test on x86_64 Linux.
+[ ] End-to-end test on x86_64 Linux with a real Apple test account.
 
 ## Rust sidecar
 [x] Add linux-sidecar Cargo project with stable NDJSON protocol.

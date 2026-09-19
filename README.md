@@ -25,7 +25,7 @@ A Hackintosh that behaves like a normal supported macOS installation can use the
 
 Linux has a transport adapter that launches a local iMessage backend and communicates with it using newline-delimited JSON (NDJSON).
 
-The adapter is ready for a direct Linux iMessage implementation. The direct Apple protocol/authentication implementation is intentionally not bundled yet.
+The adapter is ready for the direct Linux iMessage implementation under `linux-sidecar/direct-imessage`. That backend now contains provisioning, authentication, incoming-event handling, and text sending, although real Linux hardware validation is still pending.
 
 The intended long-term backend is a rustpush-compatible implementation capable of authenticating on Linux after Intel-Mac provisioning. This is the part that still needs end-to-end integration and testing.
 
@@ -171,7 +171,7 @@ journalctl --user -u imsg-to-discord -f
 
 The Linux adapter is not itself an iMessage implementation.
 
-The next major task is integrating a direct Linux iMessage backend, with rustpush being the current implementation to investigate. The desired final architecture is:
+The next major task is real Linux hardware validation of the direct backend. The desired final architecture is:
 
 ```
 iPhone
@@ -222,8 +222,8 @@ Remember that private messages forwarded into Discord are processed by Discord's
 
 ## Current limitations
 
-- Direct Linux iMessage connectivity is not implemented yet.
-- Linux currently requires a separate local backend speaking the documented NDJSON protocol.
+- Direct Linux iMessage code exists, but it is not yet end-to-end validated on real Linux hardware.
+- Linux requires the direct backend executable, or another compatible backend, speaking the documented NDJSON protocol.
 - Intel Monterey compatibility needs real-device testing.
 - Hackintosh compatibility depends on Messages.app, Contacts, Apple services, and permissions functioning normally.
 - ARM Linux/Raspberry Pi is not currently targeted.
@@ -271,16 +271,21 @@ npm test
 
 The suite checks JavaScript syntax, privacy behavior, normalized transport events, and the Linux NDJSON adapter using a local mock subprocess. It does not contact Apple or Discord.
 
-GitHub Actions tests Node.js 20 and 22 on every push to `main` and pull request.
+GitHub Actions tests Node.js 22 and 24 on every push to `main` and pull request.
 
 
 ## Linux sidecar development
 
-The repository now contains a Rust sidecar under `linux-sidecar/`. It owns the future direct iMessage implementation while `src/transports/linux.js` remains the Node/Discord-facing process adapter.
+The repository contains two Rust layers under `linux-sidecar/`.
 
-Current sidecar state:
+The stable sidecar owns the NDJSON protocol. `linux-sidecar/direct-imessage/` owns the rustpush-backed implementation.
 
-- NDJSON startup and request protocol implemented.
-- rustpush revision pinned behind the optional `direct-imessage` feature.
-- Real Apple authentication, registration, incoming-event handling, and sending are still in progress.
-- Rust formatting and compilation are checked by GitHub Actions.
+Current direct-backend state:
+
+- Apple hardware-config loading implemented.
+- Interactive Apple ID and 2FA provisioning implemented.
+- IDS registration and persistent APS/IDS state implemented.
+- Incoming text messages converted to normalized NDJSON.
+- Text replies sent through IMClient.
+- Attachment transfer and real Linux x86_64 end-to-end validation remain outstanding.
+- The direct crate is deliberately excluded from normal GitHub Actions until rustpush's external submodule can be built reproducibly in CI.
