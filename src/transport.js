@@ -1,6 +1,7 @@
 class MessageTransport {
   async start(_onMessage) { throw new Error('MessageTransport.start() is not implemented'); }
   async sendText(_chatId, _text) { throw new Error('MessageTransport.sendText() is not implemented'); }
+  status() { return { backend: 'unknown', connected: false, details: 'No status implementation.' }; }
   async close() {}
 }
 
