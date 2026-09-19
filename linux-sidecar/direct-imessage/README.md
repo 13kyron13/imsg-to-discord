@@ -71,3 +71,29 @@ The source implementation is now present, but direct iMessage support is not con
 - survived an APS reconnect
 
 This crate is intentionally not part of the normal GitHub Actions compile job because the pinned rustpush repository contains an external Git submodule. The CI job still checks formatting and the Cargo manifest.
+
+## Build
+
+From the repository root on Linux x86_64:
+
+    bash build-linux-direct.sh
+
+The helper configures public Git SSH URLs to use HTTPS and builds the pinned rustpush revision in release mode.
+
+For a manual build:
+
+    export CARGO_NET_GIT_FETCH_WITH_CLI=true
+    cargo build --manifest-path linux-sidecar/direct-imessage/Cargo.toml --release
+
+After the build:
+
+    linux-sidecar/direct-imessage/target/release/imsg-direct provision
+    linux-sidecar/direct-imessage/target/release/imsg-direct bridge
+
+The Node bridge should use:
+
+    MESSAGE_BACKEND=linux
+    LINUX_IMESSAGE_COMMAND=/absolute/path/to/imsg-direct
+    LINUX_IMESSAGE_ARGS=["bridge"]
+
+Do not put Apple credentials or provisioning state in the repository.
