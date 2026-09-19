@@ -2,6 +2,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+RUSTPUSH_REV="f35c4ee062b3c3eae54dc96b89b90ee99f5e1d0c"
+TMP_ROOT="$(mktemp -d)"
+RUSTPUSH_DIR="$TMP_ROOT/rustpush"
+DIRECT_DIR="$TMP_ROOT/direct-imessage"
+
+cleanup() {
+  rm -rf "$TMP_ROOT"
+}
+trap cleanup EXIT
 
 if [[ "$(uname -s)" != "Linux" ]]; then
   echo "The direct iMessage backend targets Linux only." >&2
@@ -14,7 +23,7 @@ if [[ "$(uname -m)" != "x86_64" ]]; then
 fi
 
 command -v cargo >/dev/null 2>&1 || {
-  echo "Cargo was not found. Install Rust from rustup before building." >&2
+  echo "Cargo was not found. Install Rust before building." >&2
   exit 1
 }
 
@@ -23,29 +32,68 @@ command -v git >/dev/null 2>&1 || {
   exit 1
 }
 
+export CARGO_NET_GIT_FETCH_WITH_CLI=true
+export GIT_TERMINAL_PROMPT=0
+
+echo "Fetching pinned rustpush source..."
+
 git config --global url."https://github.com/".insteadOf "git@github.com:"
 git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
 
-export CARGO_NET_GIT_FETCH_WITH_CLI=true
+git clone "https://github.com/OpenBubbles/rustpush.git" "$RUSTPUSH_DIR"
+git -C "$RUSTPUSH_DIR" fetch --no-tags origin "$RUSTPUSH_REV"
+git -C "$RUSTPUSH_DIR" checkout --detach "$RUSTPUSH_REV"
 
-cargo build   --manifest-path "$ROOT/linux-sidecar/direct-imessage/Cargo.toml"   --release
+sed -i 's#git@github.com:#https://github.com/#g' "$RUSTPUSH_DIR/.gitmodules"
+git -C "$RUSTPUSH_DIR" submodule sync
+git -C "$RUSTPUSH_DIR" submodule update --init
 
-BIN="$ROOT/linux-sidecar/direct-imessage/target/release/imsg-direct"
+git -C "$RUSTPUSH_DIR" submodule foreach '
+  if [ -f .gitmodules ]; then
+    sed -i "s#git@github.com:#https://github.com/#g" .gitmodules
+    git submodule sync
+  fi
+'
+
+git -C "$RUSTPUSH_DIR" submodule sync --recursive
+git -C "$RUSTPUSH_DIR" submodule update --init --recursive
+
+git -C "$RUSTPUSH_DIR" submodule foreach --recursive '
+  if [ -f .gitmodules ]; then
+    sed -i "s#git@github.com:#https://github.com/#g" .gitmodules
+    git submodule sync --recursive
+  fi
+'
+
+git -C "$RUSTPUSH_DIR" submodule update --init --recursive
+
+cp -R "$ROOT/linux-sidecar/direct-imessage/." "$DIRECT_DIR/"
+
+sed -i "s#rustpush = { git = \"https://github.com/OpenBubbles/rustpush\", rev = \"$RUSTPUSH_REV\" }#rustpush = { path = \"$RUSTPUSH_DIR\" }#" "$DIRECT_DIR/Cargo.toml"
+
+echo "Building direct Linux iMessage backend..."
+cargo build --manifest-path "$DIRECT_DIR/Cargo.toml" --release
+
+BIN="$DIRECT_DIR/target/release/imsg-direct"
+OUT="$ROOT/linux-sidecar/direct-imessage/target/release/imsg-direct"
 
 if [[ ! -x "$BIN" ]]; then
-  echo "Build completed but the imsg-direct binary was not found at:" >&2
-  echo "  $BIN" >&2
+  echo "Build completed but imsg-direct was not produced." >&2
   exit 1
 fi
 
+mkdir -p "$(dirname "$OUT")"
+cp "$BIN" "$OUT"
+chmod 0755 "$OUT"
+
 echo
 echo "Built direct Linux iMessage backend:"
-echo "  $BIN"
+echo "  $OUT"
 echo
 echo "Provision once with:"
-echo "  $BIN provision"
+echo "  $OUT provision"
 echo
 echo "Then configure .env:"
 echo "  MESSAGE_BACKEND=linux"
-echo "  LINUX_IMESSAGE_COMMAND=$BIN"
-echo "  LINUX_IMESSAGE_ARGS=["bridge"]"
+echo "  LINUX_IMESSAGE_COMMAND=$OUT"
+echo "  LINUX_IMESSAGE_ARGS=[\"bridge\"]"
