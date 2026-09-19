@@ -107,6 +107,7 @@ class MacOSTransport extends MessageTransport {
   async getAttachments(messageId) {
     const files = [];
     const notes = [];
+    const tempFiles = [];
     let total = 0;
 
     for (const a of this.attachmentsFor.all(messageId)) {
@@ -124,6 +125,7 @@ class MacOSTransport extends MessageTransport {
         try {
           await execFileAsync('sips', ['-s', 'format', 'jpeg', file, '--out', out]);
           file = out;
+          tempFiles.push(out);
           uploadName = name.replace(/\.[^.]+$/, '') + '.jpg';
         } catch (err) { console.error('HEIC conversion failed:', err.message); }
       }
@@ -137,7 +139,7 @@ class MacOSTransport extends MessageTransport {
       }
     }
 
-    return { files, notes };
+    return { files, notes, tempFiles };
   }
 
   async poll(onMessage) {
@@ -146,19 +148,26 @@ class MacOSTransport extends MessageTransport {
     const contacts = await loadContacts();
 
     for (const r of rows) {
-      const prepared = r.att ? await this.getAttachments(r.id) : { files: [], notes: [] };
+      const prepared = r.att ? await this.getAttachments(r.id) : { files: [], notes: [], tempFiles: [] };
       const text = (r.text || decodeBody(r.attributedBody) || '').replace(/\uFFFC/g, '').trim();
-      await onMessage(normalizeMessage({
-        id: String(r.id),
-        chatId: r.chat_guid,
-        sender: contacts[clean(r.sender)] || r.sender || 'Unknown',
-        chatName: r.chat_name || null,
-        isGroup: r.chat_style === 43,
-        text: [text, ...prepared.notes].filter(Boolean).join('\n'),
-        attachments: prepared.files
-      }));
-      this.state.lastId = r.id;
-      this.onStateChange();
+
+      try {
+        await onMessage(normalizeMessage({
+          id: String(r.id),
+          chatId: r.chat_guid,
+          sender: contacts[clean(r.sender)] || r.sender || 'Unknown',
+          chatName: r.chat_name || null,
+          isGroup: r.chat_style === 43,
+          text: [text, ...prepared.notes].filter(Boolean).join('\n'),
+          attachments: prepared.files
+        }));
+        this.state.lastId = r.id;
+        this.onStateChange();
+      } finally {
+        for (const tempFile of prepared.tempFiles) {
+          fs.unlink(tempFile, () => {});
+        }
+      }
     }
   }
 
