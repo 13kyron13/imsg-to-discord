@@ -74,8 +74,8 @@ Legend:
 ## Security
 [x] Ignore local secrets/state.
 [x] Keep authorization in Discord layer.
-[ ] Linux helper threat model documentation.
-[ ] Avoid sensitive command-line arguments.
+[x] Linux helper threat model documentation.
+[x] Avoid sensitive command-line arguments.
 [ ] Encrypted storage for future Linux credentials.
 
 ## Future
