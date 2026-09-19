@@ -4,3 +4,10 @@ state.json
 node_modules/
 *.log
 .DS_Store
+
+# Linux direct iMessage provisioning/runtime state
+imessage-state.plist
+hwconfig.plist
+anisette/
+id_cache.plist
+target/
