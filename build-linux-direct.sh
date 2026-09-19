@@ -90,7 +90,7 @@ mkdir -p "$DIRECT_DIR/src"
 cp "$ROOT/linux-sidecar/direct-imessage/Cargo.toml" "$DIRECT_DIR/Cargo.toml"
 cp -R "$ROOT/linux-sidecar/direct-imessage/src/." "$DIRECT_DIR/src/"
 
-sed -i "s#^rustpush =.*#rustpush = { path = \"$RUSTPUSH_DIR\", default-features = false, features = [\"remote-anisette-v3\"] }#" "$DIRECT_DIR/Cargo.toml"
+sed -i "s#^rustpush =.*#rustpush = { path = \"$RUSTPUSH_DIR\", default-features = false, features = [\"macos-validation-data\", \"remote-anisette-v3\"] }#" "$DIRECT_DIR/Cargo.toml"
 printf '\n[patch.crates-io]\nquinn = { path = "'$RUSTPUSH_DIR'/third_party/quinn/quinn" }\n' >> "$DIRECT_DIR/Cargo.toml"
 
 echo "Building direct Linux iMessage backend..."
