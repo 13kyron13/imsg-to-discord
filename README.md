@@ -1,152 +1,238 @@
-
 # iMessage to Discord
 
-Forward incoming iMessages and SMS from a Mac to a private Discord channel, get pinged when they arrive, and reply straight from Discord.
+A self-hosted bridge that forwards iMessage/SMS conversations to a private Discord channel and lets the owner reply from Discord.
 
-It runs on your own Mac with your own Discord bot. It is **not** a hosted or public bot: it reads your Mac's Messages database and sends texts as you, so it only ever works for the person who sets it up.
+The project now separates Discord from the message transport, so macOS and Linux can use different iMessage backends.
 
-## Features
+## Supported targets
 
-- Incoming texts appear in a Discord channel and ping you
-- Show names instead of phone numbers using a simple `contacts.json` file (edits apply without restarting)
-- Reply from Discord using Discord's **Reply** button; the bot sends your text back through Messages
-- Works with iMessage, SMS (via Text Message Forwarding), and group chats
-- Forwards photos and other attachments (iPhone HEIC photos are converted to JPEG so they preview in Discord)
-- Only you can send anything (locked to your Discord user ID and one channel)
-- Optional auto-start at login
+### Intel macOS
 
-## How it works
+The native macOS backend uses the same Messages.app mechanisms as the original project:
 
-```
-iPhone -> Mac (Messages app) -> bot.js reads the Messages database -> Discord channel
-                                        ^                                  |
-                                        +---- AppleScript sends reply <----+
-```
+- Messages database at `~/Library/Messages/chat.db`
+- AppleScript for sending
+- Contacts.app for names
+- `sips` for HEIC conversion
 
-## Requirements
+The code is CPU-architecture independent and is intended to support Intel Macs. Monterey is a specific compatibility target, but it still needs real-device testing against the installed Messages database schema and permissions.
 
-- A Mac that stays on and connected to Wi-Fi, signed into Messages with your Apple ID
-- Node.js 20.6 or newer
-- A private Discord server that only you are in
+### Hackintosh
 
-## Setup
+A Hackintosh that behaves like a normal supported macOS installation can use the same macOS backend. There is deliberately no separate Hackintosh implementation.
 
-### 1. Get Messages working on the Mac
+### Linux x86_64
 
-1. Open Messages on the Mac and sign in with the same Apple ID as your iPhone.
-2. On your iPhone: **Settings > Messages > Text Message Forwarding**, and turn on your Mac (needed for green-bubble SMS).
-3. Send yourself a test text and confirm it shows up in the Messages app on the Mac.
+Linux has a transport adapter that launches a local iMessage backend and communicates with it using newline-delimited JSON (NDJSON).
 
-### 2. Keep the Mac awake
+The adapter is ready for a direct Linux iMessage implementation. The direct Apple protocol/authentication implementation is intentionally not bundled yet.
 
-- Plug it in. In **System Settings > Battery > Options**, turn on "Prevent automatic sleeping on power adapter when the display is off".
-- MacBooks sleep when the lid is closed. Leave the lid open, or run `sudo pmset -a disablesleep 1` (plugged in and well ventilated only; undo with `sudo pmset -a disablesleep 0`).
+The intended long-term backend is a rustpush-compatible implementation capable of authenticating on Linux after Intel-Mac provisioning. This is the part that still needs end-to-end integration and testing.
 
-### 3. Create the Discord bot
+ARM is not currently a target.
 
-1. Go to https://discord.com/developers/applications and click **New Application**.
-2. **Bot** tab: reset and copy the token. Turn **Public Bot** off and **Message Content Intent** on.
-3. **OAuth2 > URL Generator**: tick scope `bot`, then permissions **View Channels**, **Send Messages**, **Read Message History**, **Add Reactions**. Open the generated URL to add the bot to your private server.
-4. In Discord, turn on **Developer Mode** (Settings > Advanced). Right-click your channel > **Copy Channel ID**. Right-click your own name > **Copy User ID**.
-
-### 4. Install
+## Architecture
 
 ```
-git clone https://github.com/13kyron13/imsg-to-discord.git
+                    +-------------------+
+                    |    Discord Bot    |
+                    |      bot.js       |
+                    +---------+---------+
+                              |
+                       MessageTransport
+                         /          \
+                        /            \
+             +---------+              +---------+
+             |                                  |
+       macOS transport                    Linux transport
+       src/transports/                    src/transports/
+          macos.js                           linux.js
+             |                                  |
+        Messages.app                    local iMessage backend
+        chat.db / AppleScript              NDJSON stdin/stdout
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design.
+
+See [TODO.md](TODO.md) for implementation status and planned work.
+
+See [AGENTS.md](AGENTS.md) for instructions for contributors and coding agents.
+
+## Installation
+
+Requirements:
+
+- Node.js 20.6+
+- A private Discord server/channel
+- macOS for the native macOS backend, or Linux x86_64 plus a compatible iMessage backend for Linux
+
+Clone the repository:
+
+```bash
+git clone https://github.com/yoimdoingstuff/imsg-to-discord.git
 cd imsg-to-discord
 npm install
 ```
 
-### 5. Configure
+Create configuration:
 
-Create your settings file:
-
-```
+```bash
 cp .env.example .env
-nano .env
 ```
 
-Fill in the three values (no spaces around `=`, no quotes):
+Set:
 
-```
+```text
 DISCORD_TOKEN=your-bot-token
 CHANNEL_ID=your-channel-id
-OWNER_ID=your-user-id
+OWNER_ID=your-discord-user-id
+MESSAGE_BACKEND=auto
 ```
 
-Optional: if your Discord server allows larger uploads, add `MAX_UPLOAD_MB=25` (or your server's limit) to `.env`. The default is 9.5, which suits a normal server.
+## macOS setup
 
-Optional: show names instead of numbers.
+Open Messages and sign in with the same Apple Account used by the iPhone.
 
-```
-cp contacts.example.json contacts.json
-nano contacts.json
-```
+For SMS, enable Text Message Forwarding on the iPhone.
 
-Use the number exactly as it appears in Discord (usually `+` and country code, e.g. `+61412345678`). Spaces and hidden characters are ignored.
+Grant the terminal application Full Disk Access:
 
-### 6. Give Terminal access to Messages
+System Settings -> Privacy & Security -> Full Disk Access
 
-**System Settings > Privacy & Security > Full Disk Access** > add **Terminal**, then quit and reopen it. Without this the bot can't read the Messages database.
+The first time the bot sends a message, macOS may also ask for permission to control Messages.
 
-### 7. Run
+Run:
 
-```
-node --env-file=.env bot.js
+```bash
+npm start
 ```
 
-macOS will ask whether Terminal can control Messages. Click OK. Text yourself to test.
+On macOS, `MESSAGE_BACKEND=auto` selects the macOS transport.
 
-### 8. Start automatically (optional)
+For automatic startup:
 
-```
+```bash
 bash install-autostart.sh
 ```
 
-Follow the Full Disk Access instruction it prints for Node, and check `err.log` if something doesn't work.
+The Mac still needs to be awake and signed in for the native Messages backend. This is a limitation of this backend, not of the Discord layer.
 
+## Linux setup
 
-Once the autostart is run, you can use this to restart the code again if its on in the background.
+Linux uses:
 
-`launchctl kickstart -k gui/$(id -u)/com.user.discordbridge`
+```text
+bot.js
+  |
+LinuxTransport
+  |
+stdin/stdout NDJSON
+  |
+direct iMessage backend
+```
 
-## Using it
+Configure:
 
-- Every incoming text is posted to the channel and pings you.
-- To reply, use Discord's **Reply** on a forwarded message. The bot sends your text to that conversation and reacts with a check mark (or a cross if it failed).
-- A message that isn't a reply gets a reminder instead, because the bot needs the reply link to know who to send to.
+```text
+MESSAGE_BACKEND=linux
+LINUX_IMESSAGE_COMMAND=/path/to/backend
+LINUX_IMESSAGE_ARGS=[]
+```
 
-## Files
+Arguments must be a JSON array.
 
-| File | Purpose |
-| --- | --- |
-| `bot.js` | The bot |
-| `.env` | Your private settings (never committed) |
-| `contacts.json` | Your number-to-name list (never committed) |
-| `state.json` | Bot's memory of the last message and reply links (never committed, created automatically) |
-| `.env.example`, `contacts.example.json` | Templates to copy |
-| `install-autostart.sh` | Sets up start-at-login |
+The backend emits incoming messages as:
 
-## Troubleshooting
+```json
+{"event":"message","message":{"id":"123","chatId":"chat-guid","sender":"+61400000000","chatName":null,"isGroup":false,"text":"hello","attachments":[]}}
+```
 
-- **Numbers show instead of names:** check `contacts.json` is valid JSON (commas between lines, none after the last) and the number matches. Restart the bot if it still doesn't update.
-- **Nothing arrives in Discord:** confirm the text shows in the Mac's Messages app, Terminal (or Node, if auto-starting) has Full Disk Access, and the Mac isn't asleep. Check `err.log`.
-- **Every message posts twice:** two copies of the bot are running (e.g. Terminal plus auto-start), or the iPhone Shortcuts automation is still on. Stop extras with `pkill -f bot.js`.
-- **Reply shows a cross:** macOS may not have granted permission to control Messages. Open System Settings > Privacy & Security > Automation and allow it.
-- **`launchctl bootstrap` "Input/output error":** the service is probably already loaded. Run `launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.user.discordbridge.plist` first, then try again.
+The bridge sends replies as:
+
+```json
+{"action":"send","chatId":"chat-guid","text":"hello back"}
+```
+
+Diagnostics should be written to stderr.
+
+Install the Linux user service:
+
+```bash
+bash install-systemd.sh
+```
+
+View logs:
+
+```bash
+journalctl --user -u imsg-to-discord -f
+```
+
+### Direct iMessage Linux work
+
+The Linux adapter is not itself an iMessage implementation.
+
+The next major task is integrating a direct Linux iMessage backend, with rustpush being the current implementation to investigate. The desired final architecture is:
+
+```
+iPhone
+   |
+Apple iMessage / IDS
+   |
+Linux x86_64 direct backend
+   |
+LinuxTransport
+   |
+Discord
+```
+
+The intended Intel workflow is a one-time provisioning/enrichment step using an Intel Mac, followed by runtime operation entirely on Linux.
+
+Do not assume that merely setting `MESSAGE_BACKEND=linux` provides direct iMessage connectivity. A compatible backend must be installed and configured.
+
+## Contacts
+
+You can optionally create:
+
+```bash
+cp contacts.example.json contacts.json
+```
+
+The Discord layer uses this file as a fallback name mapping. The macOS backend additionally reads Contacts.app.
 
 ## Security
 
-- **Never commit `.env`, `contacts.json` or `state.json`.** `.gitignore` covers them.
-- If a token ever leaks, reset it immediately in the Developer Portal.
-- Verification codes and private messages will appear in the channel. Keep the server private to you, and remember the text passes through Discord's servers.
-- This bot can send texts as you. Don't give anyone else access to the channel or token.
+The Discord bot is deliberately restricted to:
 
-## Limitations
+- one configured Discord channel
+- one configured Discord owner
+- replies to known forwarded messages
 
-- Attachments over Discord's upload limit (about 10 MB, so most long videos) aren't uploaded; you get a note with the file name and size instead.
-- Attachments only go one way: sending photos or files from Discord back to Messages isn't supported.
-- Tapbacks/reactions are ignored.
-- iPhone calls can't be detected.
-- After a restart, the bot starts only once you've logged in to the Mac (an issue if FileVault is on).
-- Apple changes the Messages database format now and then, which can break message decoding.
+Never commit:
+
+- `.env`
+- `contacts.json`
+- `state.json`
+- iMessage authentication material
+- hardware keys
+- Apple credentials
+
+A Linux iMessage backend must be treated as a privileged local component. Do not expose its unauthenticated stdin/stdout bridge as a network service.
+
+Remember that private messages forwarded into Discord are processed by Discord's infrastructure.
+
+## Current limitations
+
+- Direct Linux iMessage connectivity is not implemented yet.
+- Linux currently requires a separate local backend speaking the documented NDJSON protocol.
+- Intel Monterey compatibility needs real-device testing.
+- Hackintosh compatibility depends on Messages.app, Contacts, Apple services, and permissions functioning normally.
+- ARM Linux/Raspberry Pi is not currently targeted.
+- Incoming attachments from Linux depend on the backend providing local attachment paths.
+- Sending attachments from Discord back to Messages is not implemented.
+- Tapbacks/reactions and calls are not currently bridged.
+
+## Project status
+
+The cross-platform foundation is now in place. The remaining difficult work is the direct Linux iMessage backend and real hardware testing.
+
+Humanity has successfully separated the Discord bot from Apple's operating system. The next challenge is convincing Apple's infrastructure that Linux deserves to participate.
