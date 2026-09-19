@@ -236,3 +236,26 @@ Remember that private messages forwarded into Discord are processed by Discord's
 The cross-platform foundation is now in place. The remaining difficult work is the direct Linux iMessage backend and real hardware testing.
 
 Humanity has successfully separated the Discord bot from Apple's operating system. The next challenge is convincing Apple's infrastructure that Linux deserves to participate.
+
+
+## Privacy controls
+
+The bot includes an owner-only privacy settings panel.
+
+Run the /imsg-settings slash command to open an ephemeral settings panel with buttons for Notification only, Hide contact, Delete with a button, Auto-delete, Keep messages, and setting the timer.
+
+Notification only tells you that a message arrived without showing the message text or uploading its attachments.
+
+Hide contact hides the sender and group name while leaving the message body visible.
+
+Delete with a button puts a Delete Discord copy button under every forwarded message.
+
+Auto-delete removes the Discord copy after a configurable number of seconds. The timer accepts 5 to 86400 seconds.
+
+Keep messages leaves forwarded messages in Discord normally.
+
+The slash command also accepts options directly. For example: /imsg-settings visibility:notification hide_contact:true delete_mode:timer delete_after:60
+
+Settings are stored in state.json and restored after restart. Deleting a Discord copy never deletes the original iMessage.
+
+The settings panel and delete buttons only respond to the configured Discord owner in the configured channel.
