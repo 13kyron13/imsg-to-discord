@@ -1,5 +1,5 @@
 const Database = require('better-sqlite3');
-const { execFile, spawn } = require('child_process');
+const { execFile } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs');
 const os = require('os');
@@ -167,6 +167,14 @@ class MacOSTransport extends MessageTransport {
   async sendText(chatId, text) {
     const script = 'on run argv\ntell application "Messages"\nsend (item 2 of argv) to chat id (item 1 of argv)\nend tell\nend run';
     await execFileAsync('osascript', ['-e', script, String(chatId), String(text)]);
+  }
+
+  status() {
+    return {
+      backend: 'macos',
+      connected: Boolean(this.db),
+      details: this.db ? 'Messages database is open.' : 'Messages database is closed.',
+    };
   }
 
   async close() {
