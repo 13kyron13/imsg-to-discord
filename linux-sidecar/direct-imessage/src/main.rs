@@ -13,11 +13,13 @@ use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use rpassword::prompt_password;
 use rustpush::macos::MacOSConfig;
+use rustpush::facetime::{FACETIME_SERVICE, VIDEO_SERVICE};
+use rustpush::findmy::MULTIPLEX_SERVICE;
 use rustpush::{
     authenticate_apple, default_provider, login_apple_delegates, register, APSConnectionResource,
     APSState, AppleAccount, ConversationData, IDSNGMIdentity, IDSUser, IMClient, LoginDelegate,
     Message, MessageInst, MessagePart, MessageType, NormalMessage, OSConfig, ResourceState,
-    FACETIME_SERVICE, MADRID_SERVICE, MULTIPLEX_SERVICE, VIDEO_SERVICE,
+    MADRID_SERVICE,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -31,7 +33,7 @@ const DEFAULT_MAX_ATTACHMENT_MB: u64 = 100;
 const DEFAULT_MAX_ATTACHMENTS: usize = 10;
 const DEFAULT_ATTACHMENT_MAX_AGE_HOURS: u64 = 24;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct SavedState {
     push: APSState,
     users: Vec<IDSUser>,
