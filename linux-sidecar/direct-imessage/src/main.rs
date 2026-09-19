@@ -8,27 +8,10 @@ use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use rpassword::prompt_password;
 use rustpush::{
-    authenticate_apple,
-    default_provider,
-    login_apple_delegates,
-    register,
-    AppleAccount,
-    APSConnectionResource,
-    APSState,
-    ConversationData,
-    IDSNGMIdentity,
-    IDSUser,
-    IMClient,
-    LoginDelegate,
-    MADRID_SERVICE,
-    MULTIPLEX_SERVICE,
-    FACETIME_SERVICE,
-    VIDEO_SERVICE,
-    Message,
-    MessageInst,
-    MessageType,
-    NormalMessage,
-    OSConfig,
+    authenticate_apple, default_provider, login_apple_delegates, register, APSConnectionResource,
+    APSState, AppleAccount, ConversationData, FACETIME_SERVICE, IDSNGMIdentity, IDSUser, IMClient,
+    LoginDelegate, MADRID_SERVICE, Message, MessageInst, MessageType, MULTIPLEX_SERVICE,
+    NormalMessage, OSConfig, VIDEO_SERVICE,
 };
 use rustpush::macos::MacOSConfig;
 use serde::{Deserialize, Serialize};
@@ -117,8 +100,7 @@ fn save_state(path: &PathBuf, state: &SavedState) -> Result<()> {
         std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
     }
 
-    std::fs::rename(&tmp, path)
-        .with_context(|| format!("installing state {}", path.display()))?;
+    std::fs::rename(&tmp, path).with_context(|| format!("installing state {}", path.display()))?;
     Ok(())
 }
 
@@ -206,9 +188,7 @@ async fn provision() -> Result<()> {
     let password_hash = Sha256::digest(password.as_bytes()).to_vec();
     let credentials = (apple_id, password_hash);
 
-    let two_factor = || -> String {
-        prompt_line("Apple 2FA code: ").unwrap_or_default()
-    };
+    let two_factor = || -> String { prompt_line("Apple 2FA code: ").unwrap_or_default() };
 
     let account = AppleAccount::login(
         || credentials.clone(),
@@ -244,7 +224,12 @@ async fn provision() -> Result<()> {
     let identity = IDSNGMIdentity::new().context("creating local iMessage identity")?;
     let mut users = vec![user];
 
-    let services = &[&MADRID_SERVICE, &MULTIPLEX_SERVICE, &FACETIME_SERVICE, &VIDEO_SERVICE];
+    let services = &[
+        &MADRID_SERVICE,
+        &MULTIPLEX_SERVICE,
+        &FACETIME_SERVICE,
+        &VIDEO_SERVICE,
+    ];
 
     register(
         config.as_ref(),
@@ -300,7 +285,12 @@ async fn bridge() -> Result<()> {
         connection.clone(),
         users,
         identity,
-        &[&MADRID_SERVICE, &MULTIPLEX_SERVICE, &FACETIME_SERVICE, &VIDEO_SERVICE],
+        &[
+            &MADRID_SERVICE,
+            &MULTIPLEX_SERVICE,
+            &FACETIME_SERVICE,
+            &VIDEO_SERVICE,
+        ],
         PathBuf::from("id_cache.plist"),
         config.clone(),
         Box::new(move |updated_users| {
