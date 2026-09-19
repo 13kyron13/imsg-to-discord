@@ -15,6 +15,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+UMask=0077
 WorkingDirectory=$DIR
 ExecStart=$NODE --env-file=.env bot.js
 Restart=on-failure
