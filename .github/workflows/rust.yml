@@ -29,8 +29,14 @@ jobs:
           git config --global url."https://github.com/OpenBubbles/".insteadOf "ssh://git@github.com/OpenBubbles/"
           git config --global protocol.version 2
 
-      - name: Check formatting
+      - name: Check stable sidecar formatting
         run: cargo fmt --manifest-path linux-sidecar/Cargo.toml -- --check
+
+      - name: Check direct backend formatting
+        run: cargo fmt --manifest-path linux-sidecar/direct-imessage/Cargo.toml -- --check
+
+      - name: Check direct backend manifest
+        run: cargo metadata --manifest-path linux-sidecar/direct-imessage/Cargo.toml --no-deps --format-version 1
 
       - name: Check Linux sidecar
         env:
