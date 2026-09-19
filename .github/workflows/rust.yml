@@ -42,3 +42,43 @@ jobs:
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: "true"
         run: cargo check --manifest-path linux-sidecar/Cargo.toml
+
+  direct-imessage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Configure public Git dependencies
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global protocol.version 2
+
+      - name: Fetch pinned rustpush with submodules
+        env:
+          RUSTPUSH_REV: f35c4ee062b3c3eae54dc96b89b90ee99f5e1d0c
+        run: |
+          git clone https://github.com/OpenBubbles/rustpush.git /tmp/rustpush
+          git -C /tmp/rustpush fetch --no-tags origin "$RUSTPUSH_REV"
+          git -C /tmp/rustpush checkout --detach "$RUSTPUSH_REV"
+          git -C /tmp/rustpush submodule sync --recursive
+          git -C /tmp/rustpush submodule update --init --recursive
+
+      - name: Patch rustpush to the fetched source
+        run: |
+          mkdir -p .cargo
+          cat > .cargo/config.toml <<'EOF'
+          [patch."https://github.com/OpenBubbles/rustpush"]
+          rustpush = { path = "/tmp/rustpush" }
+          EOF
+
+      - name: Check direct Linux backend
+        env:
+          CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+        run: cargo check --manifest-path linux-sidecar/direct-imessage/Cargo.toml
