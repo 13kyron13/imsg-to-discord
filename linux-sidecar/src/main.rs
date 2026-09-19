@@ -11,7 +11,7 @@ enum Request {
 
 #[derive(Debug, Serialize)]
 struct Event<'a> {
-    event: &'a str,
+    event: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     message: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -30,7 +30,7 @@ async fn emit(event: Event<'_>) -> Result<()> {
 #[tokio::main]
 async fn main() -> Result<()> {
     emit(Event {
-        event: "ready",
+        event: "ready".to_string(),
         message: None,
         error: None,
     }).await?;
@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
             Ok(request) => request,
             Err(err) => {
                 emit(Event {
-                    event: "error",
+                    event: "error".to_string(),
                     message: None,
                     error: Some(Box::leak(format!("invalid request: {err}").into_boxed_str())),
                 }).await?;
