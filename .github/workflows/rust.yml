@@ -67,7 +67,15 @@ jobs:
           git clone https://github.com/OpenBubbles/rustpush.git /tmp/rustpush
           git -C /tmp/rustpush fetch --no-tags origin "$RUSTPUSH_REV"
           git -C /tmp/rustpush checkout --detach "$RUSTPUSH_REV"
+          sed -i 's#git@github.com:#https://github.com/#g' /tmp/rustpush/.gitmodules
           git -C /tmp/rustpush submodule sync --recursive
+          git -C /tmp/rustpush submodule update --init --recursive
+          git -C /tmp/rustpush submodule foreach --recursive '
+            if [ -f .gitmodules ]; then
+              sed -i "s#git@github.com:#https://github.com/#g" .gitmodules
+              git submodule sync --recursive
+            fi
+          '
           git -C /tmp/rustpush submodule update --init --recursive
 
       - name: Patch rustpush to the fetched source
