@@ -44,10 +44,10 @@ Legend:
 [x] Persist provisioned IDS/APS state with restrictive local permissions.
 [ ] Test incoming iMessages.
 [~] Implement text replies through NDJSON.
-[ ] Test groups.
-[ ] Test attachments.
-[ ] Test SMS forwarding.
-[ ] Test reconnect behavior.
+[~] Implement and prepare group-message routing; real-device test remains.
+[~] Implement incoming attachment transfer; real-device test remains.
+[~] Implement SMS routing; real-device test remains.
+[~] Implement rustpush resource-state reconnect reporting; real-device test remains.
 
 ## Discord
 [x] Owner-only sending.
@@ -107,15 +107,15 @@ Legend:
 [x] Add dedicated Rust sidecar scaffold instead of using rustpush test executable.
 [x] Document the current upstream API/integration boundary.
 [x] Record a known-good rustpush revision for the direct integration crate.
-[ ] Implement hardware-config import.
-[ ] Implement persistent Apple authentication state.
-[ ] Implement 2FA provisioning flow.
-[ ] Bridge incoming IMClient events to NDJSON.
-[ ] Bridge NDJSON send requests to IMClient.
-[ ] Add attachment transfer.
+[x] Load imported hardware configuration.
+[x] Persist provisioned IDS/APS state with restrictive local permissions.
+[x] Add Apple ID / 2FA provisioning command.
+[x] Bridge incoming IMClient text/events to normalized NDJSON.
+[x] Bridge NDJSON text send requests to IMClient.
+[x] Add incoming attachment download and local cache.
 [ ] End-to-end test on x86_64 Linux with a real Apple test account.
 
 ## Rust sidecar
 [x] Add linux-sidecar Cargo project with stable NDJSON protocol.
 [x] Isolate the evaluated rustpush revision from the stable sidecar build.
-[~] Implement real rustpush-backed authentication and IMClient event handling in the direct-imessage crate.
+[~] Implement real rustpush-backed authentication, attachment, SMS/group routing, and IMClient reconnect handling in the direct-imessage crate.

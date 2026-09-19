@@ -55,10 +55,12 @@ This path is CPU-independent. Intel Monterey and Hackintosh are treated as norma
 src/transports/linux.js launches a local helper and exchanges newline-delimited JSON.
 
 Incoming:
-    {"event":"message","message":{"id":"...","chatId":"...","sender":"...","text":"...","attachments":[]}}
+    {"event":"message","message":{"id":"...","chatId":"imsg:...","sender":"...","text":"...","attachments":[],"service":"imessage"}}
 
 Outgoing:
-    {"action":"send","chatId":"...","text":"..."}
+    {"action":"send","chatId":"imsg:...","text":"..."}
+
+SMS conversations use the same normalized schema but an `sms:` chat-ID prefix and `service:"sms"`. Group participant sets are encoded deterministically into the chat ID so replies can reconstruct the same conversation.
 
 This is deliberately an adapter boundary, not a fake iMessage implementation.
 
@@ -72,6 +74,7 @@ The planned direct backend is a dedicated Rust integration. The evaluated rustpu
   sender: String|null,
   chatName: String|null,
   isGroup: Boolean,
+  service: "imessage"|"sms"|null,
   text: String,
   attachments: [
     {
@@ -173,6 +176,6 @@ The repository's tests use Node's built-in test runner and include privacy-polic
 
 `linux-sidecar/` is the Rust process boundary for the eventual direct Linux iMessage backend.
 
-The current stable sidecar implements the NDJSON process protocol. The direct backend in `linux-sidecar/direct-imessage/` implements the real rustpush-backed authentication, receive, and text-send path. The Node `LinuxTransport` process supervisor, not the sidecar, owns restart/backoff behavior.
+The current stable sidecar implements the NDJSON process protocol. The direct backend in `linux-sidecar/direct-imessage/` implements the real rustpush-backed authentication, receive, attachment download, SMS/group routing, text-send, and reconnect-status path. The Node `LinuxTransport` process supervisor, not the sidecar, owns restart/backoff behavior.
 
 The separate `linux-sidecar/direct-imessage/` crate contains the direct backend. It has `provision` and `bridge` modes: provisioning authenticates the Apple Account and stores IDS/APS state; bridge mode runs the long-lived NDJSON service without requiring the Mac to remain online. Keeping this crate separate prevents rustpush's external Git submodules from breaking the stable protocol build.

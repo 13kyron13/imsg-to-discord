@@ -227,7 +227,9 @@ Remember that private messages forwarded into Discord are processed by Discord's
 - Intel Monterey compatibility needs real-device testing.
 - Hackintosh compatibility depends on Messages.app, Contacts, Apple services, and permissions functioning normally.
 - ARM Linux/Raspberry Pi is not currently targeted.
-- Incoming attachments from Linux depend on the backend providing local attachment paths.
+- SMS and group routing are implemented in the direct backend but still need real-device validation.
+- Reconnect status is implemented through rustpush resource-state events and still needs real-device testing.
+- Linux incoming attachments are downloaded by the direct backend into a private local cache and exposed to the Discord layer as attachment paths.
 - Sending attachments from Discord back to Messages is not implemented.
 - Tapbacks/reactions and calls are not currently bridged.
 
@@ -287,5 +289,5 @@ Current direct-backend state:
 - IDS registration and persistent APS/IDS state implemented.
 - Incoming text messages converted to normalized NDJSON.
 - Text replies sent through IMClient.
-- Attachment transfer and real Linux x86_64 end-to-end validation remain outstanding.
-- The direct crate is deliberately excluded from normal GitHub Actions until rustpush's external submodule can be built reproducibly in CI.
+- Incoming attachment transfer is implemented. Real Linux x86_64 end-to-end validation remains outstanding.
+- The direct crate is deliberately excluded from normal GitHub Actions compilation until rustpush's external submodule can be built reproducibly in CI. Formatting and manifest validation are still automated.

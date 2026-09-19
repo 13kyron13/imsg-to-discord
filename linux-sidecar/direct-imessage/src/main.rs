@@ -1,3 +1,6 @@
+#[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+compile_error!("direct-imessage backend targets Linux x86_64 only");
+
 use std::{
     fs,
     io::{self, Write},
