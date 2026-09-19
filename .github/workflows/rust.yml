@@ -86,15 +86,10 @@ jobs:
           '
           git -C /tmp/rustpush submodule update --init --recursive
 
-      - name: Patch rustpush to the fetched source
+      - name: Patch direct backend to the fetched rustpush source
         run: |
-          mkdir -p .cargo
-          cat > .cargo/config.toml <<'EOF'
-          [patch."https://github.com/OpenBubbles/rustpush"]
-          rustpush = { path = "/tmp/rustpush" }
-          EOF
+          sed -i 's#rustpush = { git = "https://github.com/OpenBubbles/rustpush", rev = "f35c4ee062b3c3eae54dc96b89b90ee99f5e1d0c" }#rustpush = { path = "/tmp/rustpush" }#' linux-sidecar/direct-imessage/Cargo.toml
+          grep '^rustpush =' linux-sidecar/direct-imessage/Cargo.toml
 
       - name: Check direct Linux backend
-        env:
-          CARGO_NET_GIT_FETCH_WITH_CLI: "true"
         run: cargo check --manifest-path linux-sidecar/direct-imessage/Cargo.toml
