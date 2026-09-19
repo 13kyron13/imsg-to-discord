@@ -104,9 +104,9 @@ Legend:
 [x] Add GitHub Actions CI for Node 20 and 22.
 
 ## Linux rustpush integration
-[~] Add dedicated Rust sidecar instead of using rustpush test executable.
+[x] Add dedicated Rust sidecar scaffold instead of using rustpush test executable.
 [x] Document the current upstream API/integration boundary.
-[ ] Pin a known-good rustpush revision.
+[x] Pin a known-good rustpush revision.
 [ ] Implement hardware-config import.
 [ ] Implement persistent Apple authentication state.
 [ ] Implement 2FA provisioning flow.
@@ -114,3 +114,8 @@ Legend:
 [ ] Bridge NDJSON send requests to IMClient.
 [ ] Add attachment transfer.
 [ ] End-to-end test on x86_64 Linux.
+
+## Rust sidecar
+[x] Add linux-sidecar Cargo project with stable NDJSON protocol.
+[x] Pin rustpush dependency revision behind an optional direct-imessage feature.
+[~] Implement real rustpush-backed authentication and IMClient event handling.
