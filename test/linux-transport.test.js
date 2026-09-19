@@ -37,12 +37,14 @@ test('LinuxTransport speaks the documented NDJSON protocol', async () => {
       sender: '+61400000000',
       chatName: null,
       isGroup: false,
+      service: 'imessage',
       text: 'hello',
       attachments: [],
     });
 
-    await transport.sendText('chat-1', 'reply');
     assert.equal(transport.status().connected, true);
+
+    await transport.sendText('chat-1', 'reply');
   } finally {
     await transport?.close();
 
