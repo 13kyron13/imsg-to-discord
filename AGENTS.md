@@ -76,3 +76,11 @@ Treat privacy settings as security-sensitive presentation policy.
 - Only OWNER_ID in CHANNEL_ID may use settings or delete buttons.
 - Persist only chat IDs and deletion timestamps; do not persist incoming message bodies.
 - Future chat-specific privacy settings must not weaken the global owner/channel authorization.
+
+## Testing rules
+
+- Run `npm test` before changing behavior in a transport or privacy setting.
+- Keep privacy policy tests platform-independent under `test/`.
+- Linux transport changes should include or update an NDJSON subprocess test.
+- Do not make tests require a live Apple Account, Discord token, Messages database, or hardware key.
+- CI intentionally tests the cross-platform layers without attempting real iMessage authentication.
