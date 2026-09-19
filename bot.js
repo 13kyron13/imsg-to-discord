@@ -28,17 +28,84 @@ const CONTACTS_FILE = path.join(__dirname, 'contacts.json');
 const MAX_UPLOAD_BYTES = (Number(process.env.MAX_UPLOAD_MB) || 9.5) * 1024 * 1024;
 const MAX_FILES_PER_MESSAGE = 10;
 
-// ---------- contacts (number -> name), read from contacts.json ----------
-// Strips everything except digits and "+", so invisible characters from copy/paste can't break matching
-const clean = (s) => (s || '').replace(/[^\d+]/g, '');
+// ---------- contacts (automatically read from macOS Contacts) ----------
 
-// Re-read on each batch of new messages, so edits to contacts.json apply without a restart
-function loadContacts() {
+// Normalize phone numbers so different formatting still matches.
+// Examples:
+//   "0412 345 678"    -> "61412345678"
+//   "+61 412 345 678" -> "61412345678"
+//   "0412345678"      -> "61412345678"
+function clean(s) {
+  if (!s) return '';
+
+  let number = String(s).replace(/\D/g, '');
+
+  // Australian local number -> international format
+  if (number.startsWith('0') && number.length === 10) {
+    number = '61' + number.slice(1);
+  }
+
+  return number;
+}
+
+// Contacts are cached for 60 seconds so we don't repeatedly query
+// the entire macOS Contacts database for every incoming message.
+let contactsCache = {};
+let contactsCacheTime = 0;
+
+async function loadContacts() {
+  const now = Date.now();
+
+  if (now - contactsCacheTime < 60000) {
+    return contactsCache;
+  }
+
+  const script = `
+tell application "Contacts"
+    set output to {}
+    repeat with p in people
+        set personName to name of p
+
+        repeat with ph in phones of p
+            set phoneNumber to value of ph
+            set end of output to phoneNumber & "\\t" & personName
+        end repeat
+    end repeat
+
+    set AppleScript's text item delimiters to linefeed
+    return output as text
+end tell
+`;
+
   try {
-    const raw = JSON.parse(fs.readFileSync(CONTACTS_FILE, 'utf8'));
-    return Object.fromEntries(Object.entries(raw).map(([num, name]) => [clean(num), name]));
-  } catch {
-    return {};
+    const { stdout } = await execFileAsync('osascript', ['-e', script]);
+
+    const contacts = {};
+
+    for (const line of stdout.trim().split('\\n')) {
+      const tab = line.indexOf('\\t');
+
+      if (tab === -1) continue;
+
+      const number = clean(line.slice(0, tab));
+      const name = line.slice(tab + 1).trim();
+
+      if (number && name) {
+        contacts[number] = name;
+      }
+    }
+
+    contactsCache = contacts;
+    contactsCacheTime = now;
+
+    console.log(`Loaded ${Object.keys(contacts).length} phone numbers from Contacts.`);
+
+    return contacts;
+  } catch (err) {
+    console.error('Could not read Contacts:', err.message);
+
+    // If Contacts temporarily fails, keep using the last successful cache.
+    return contactsCache;
   }
 }
 
@@ -202,7 +269,7 @@ async function poll() {
   try {
     const rows = newMessages.all(state.lastId);
     if (rows.length) {
-      const contacts = loadContacts();
+      const contacts = await loadContacts();
       const channel = await client.channels.fetch(CHANNEL_ID);
       for (const r of rows) {
         const tempFiles = [];
