@@ -1,4 +1,4 @@
-# Message Bridge
+# iMessage to Discord
 
 Forwards incoming iMessage and SMS from a Mac to a private Discord channel, pings you, and lets you reply from Discord using Discord's Reply feature.
 
