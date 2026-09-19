@@ -71,7 +71,11 @@ function saveState() {
   }
 
   state.seenMessageIds = state.seenMessageIds.slice(-1000);
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  const tempFile = STATE_FILE + '.tmp';
+  fs.writeFileSync(tempFile, JSON.stringify(state, null, 2), { mode: 0o600 });
+  fs.chmodSync(tempFile, 0o600);
+  fs.renameSync(tempFile, STATE_FILE);
+  fs.chmodSync(STATE_FILE, 0o600);
 }
 
 function loadLocalContacts() {
