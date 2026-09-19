@@ -22,8 +22,7 @@ require('readline')
       const request = JSON.parse(line);
 
       if (request.action === 'send') {
-        process.stderr.write('send:' + request.chatId + '
-');
+        process.stderr.write('send:' + request.chatId + '\n');
       }
     } catch {
       // Ignore malformed test input.
