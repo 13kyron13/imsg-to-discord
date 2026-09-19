@@ -27,6 +27,12 @@ command -v cargo >/dev/null 2>&1 || {
   exit 1
 }
 
+command -v protoc >/dev/null 2>&1 || {
+  echo "protoc was not found. Install the Protocol Buffers compiler before building." >&2
+  echo "On Debian/Ubuntu: sudo apt-get install protobuf-compiler" >&2
+  exit 1
+}
+
 command -v git >/dev/null 2>&1 || {
   echo "Git was not found." >&2
   exit 1
