@@ -307,3 +307,8 @@ Current direct-backend state:
 - Text replies sent through IMClient.
 - Incoming attachment transfer is implemented. Real Linux x86_64 end-to-end validation remains outstanding.
 - The direct crate is deliberately excluded from normal GitHub Actions compilation until rustpush's external submodule can be built reproducibly in CI. Formatting and manifest validation are still automated.
+
+
+## Linux direct-backend validation
+
+The direct Linux backend has CI compile/test coverage, but real iMessage, SMS, attachment, reconnect, and persistence checks still require a Linux x86_64 host and a dedicated Apple test account. See `docs/LINUX-HARDWARE-TEST.md` for the test matrix and `docs/LINUX-SECURITY.md` for the local security boundary.
