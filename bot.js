@@ -45,6 +45,7 @@ function loadState() {
       replyMap: loaded.replyMap || {},
       deleteMap: loaded.deleteMap || {},
       settings: normalizeSettings(loaded.settings || DEFAULT_SETTINGS),
+      seenMessageIds: Array.isArray(loaded.seenMessageIds) ? loaded.seenMessageIds.map(String).slice(-1000) : [],
     };
   } catch {
     return {
@@ -52,6 +53,7 @@ function loadState() {
       replyMap: {},
       deleteMap: {},
       settings: { ...DEFAULT_SETTINGS },
+      seenMessageIds: [],
     };
   }
 }
@@ -68,6 +70,7 @@ function saveState() {
     }
   }
 
+  state.seenMessageIds = state.seenMessageIds.slice(-1000);
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
@@ -298,6 +301,11 @@ async function restoreScheduledDeletes(channel) {
 }
 
 async function handleIncoming(message) {
+  const messageId = String(message.id);
+  if (state.seenMessageIds.includes(messageId)) {
+    return;
+  }
+
   const channel = await client.channels.fetch(CHANNEL_ID);
 
   const files = shouldUploadAttachments(state.settings)
@@ -336,6 +344,7 @@ async function handleIncoming(message) {
     scheduleDelete(sent.id, channel, deleteAt);
   }
 
+  state.seenMessageIds.push(messageId);
   saveState();
 }
 
