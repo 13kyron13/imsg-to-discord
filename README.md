@@ -259,3 +259,16 @@ The slash command also accepts options directly. For example: /imsg-settings vis
 Settings are stored in state.json and restored after restart. Deleting a Discord copy never deletes the original iMessage.
 
 The settings panel and delete buttons only respond to the configured Discord owner in the configured channel.
+
+
+## Development and tests
+
+Run the test suite with:
+
+```bash
+npm test
+```
+
+The suite checks JavaScript syntax, privacy behavior, normalized transport events, and the Linux NDJSON adapter using a local mock subprocess. It does not contact Apple or Discord.
+
+GitHub Actions tests Node.js 20 and 22 on every push to `main` and pull request.
