@@ -12,9 +12,9 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use rpassword::prompt_password;
-use rustpush::macos::MacOSConfig;
 use rustpush::facetime::{FACETIME_SERVICE, VIDEO_SERVICE};
 use rustpush::findmy::MULTIPLEX_SERVICE;
+use rustpush::macos::MacOSConfig;
 use rustpush::{
     authenticate_apple, default_provider, login_apple_delegates, register, APSConnectionResource,
     APSState, AppleAccount, ConversationData, IDSNGMIdentity, IDSUser, IMClient, LoginDelegate,
