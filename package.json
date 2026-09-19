@@ -4,7 +4,7 @@
   "description": "Self-hosted iMessage/SMS to Discord bridge with macOS and Linux transport backends.",
   "main": "bot.js",
   "scripts": {
-    "test": "node --check bot.js && node --check src/transport.js && node --check src/privacy.js && node --check src/transports/macos.js && node --check src/transports/linux.js && node --test",
+    "test": "node --check bot.js && node --check src/transport.js && node --check src/privacy.js && node --check src/transports/macos.js && node --check src/transports/linux.js && node --test --test-concurrency=1",
     "start": "node --env-file=.env bot.js",
     "test:unit": "node --test test/privacy.test.js test/transport.test.js"
   },
