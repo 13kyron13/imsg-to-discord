@@ -64,8 +64,8 @@ Legend:
 [~] Structured logging.
 [x] Graceful shutdown.
 [ ] Health checks.
-[ ] Linux duplicate-event protection.
-[~] Better persistent cursor handling.
+[x] Linux duplicate-event protection.
+[x] Better persistent cursor handling.
 [x] Transport reconnect.
 [x] Fake transport integration tests.
 [x] CI for syntax/tests.
