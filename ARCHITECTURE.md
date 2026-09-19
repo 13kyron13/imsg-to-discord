@@ -125,3 +125,35 @@ Linux:
 One-time provisioning is expected to use an Intel Mac hardware key. The Mac should not need to remain online for the Intel-key Linux path.
 
 Apple Silicon provisioning is outside the first Linux target.
+
+
+## Privacy and Discord presentation layer
+
+Privacy settings are stored in state.json:
+
+- visibility: full or notification
+- hideSender: boolean
+- deleteMode: keep, button, or timer
+- deleteAfterSeconds: 5-86400
+
+The settings are exposed through the owner-only /imsg-settings command.
+
+The settings panel is an ephemeral Discord embed with buttons to toggle message contents vs notification-only, toggle contact visibility, cycle deletion mode, open a timer modal, and refresh the panel.
+
+### Notification-only mode
+
+The bridge sends a notification without the incoming message text and without attachments. If contact hiding is disabled, the notification may identify the sender/group. If contact hiding is enabled, no sender or group name is included.
+
+### Hide-contact mode
+
+Hide-contact applies to both full-message and notification modes. In full-message mode the text remains visible, but the sender and group name are omitted.
+
+### Delete modes
+
+Keep leaves the Discord copy until manually deleted.
+
+Button adds a Delete Discord copy button to each forwarded message. Pressing it removes only the Discord copy. The original iMessage is never deleted.
+
+Timer deletes the Discord copy after deleteAfterSeconds. Pending deletion timestamps are persisted and restored after restart.
+
+The delete button and settings interactions are restricted to OWNER_ID in CHANNEL_ID.
