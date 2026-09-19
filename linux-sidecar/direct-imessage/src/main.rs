@@ -1,0 +1,459 @@
+use std::{
+    io::{self, Write},
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
+
+use anyhow::{anyhow, Context, Result};
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use rpassword::prompt_password;
+use rustpush::{
+    authenticate_apple,
+    default_provider,
+    login_apple_delegates,
+    register,
+    AppleAccount,
+    APSConnectionResource,
+    APSState,
+    ConversationData,
+    IDSNGMIdentity,
+    IDSUser,
+    IMClient,
+    LoginDelegate,
+    MADRID_SERVICE,
+    MULTIPLEX_SERVICE,
+    FACETIME_SERVICE,
+    VIDEO_SERVICE,
+    Message,
+    MessageInst,
+    MessageType,
+    NormalMessage,
+    OSConfig,
+};
+use rustpush::macos::MacOSConfig;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+const DEFAULT_HWCONFIG: &str = "hwconfig.plist";
+const DEFAULT_STATE: &str = "imessage-state.plist";
+const DEFAULT_ANISETTE: &str = "anisette";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SavedState {
+    push: APSState,
+    users: Vec<IDSUser>,
+    identity: IDSNGMIdentity,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "action")]
+enum Request {
+    #[serde(rename = "send")]
+    Send {
+        #[serde(rename = "chatId")]
+        chat_id: String,
+        text: String,
+    },
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "event")]
+enum Event {
+    #[serde(rename = "ready")]
+    Ready,
+    #[serde(rename = "status")]
+    Status { connected: bool },
+    #[serde(rename = "message")]
+    Message { message: NormalizedMessage },
+    #[serde(rename = "sent")]
+    Sent {
+        id: String,
+        #[serde(rename = "chatId")]
+        chat_id: String,
+    },
+    #[serde(rename = "error")]
+    Error { error: String },
+}
+
+#[derive(Debug, Serialize)]
+struct NormalizedMessage {
+    id: String,
+    #[serde(rename = "chatId")]
+    chat_id: String,
+    sender: Option<String>,
+    #[serde(rename = "chatName")]
+    chat_name: Option<String>,
+    #[serde(rename = "isGroup")]
+    is_group: bool,
+    text: String,
+    attachments: Vec<Attachment>,
+}
+
+#[derive(Debug, Serialize)]
+struct Attachment {
+    path: String,
+    name: String,
+    #[serde(rename = "mimeType")]
+    mime_type: Option<String>,
+}
+
+fn env_path(name: &str, default: &str) -> PathBuf {
+    std::env::var_os(name)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(default))
+}
+
+fn save_state(path: &PathBuf, state: &SavedState) -> Result<()> {
+    let tmp = path.with_extension("tmp");
+    let file = std::fs::File::create(&tmp)
+        .with_context(|| format!("creating temporary state {}", tmp.display()))?;
+    plist::to_writer_xml(file, state)
+        .with_context(|| format!("writing state {}", tmp.display()))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
+    }
+
+    std::fs::rename(&tmp, path)
+        .with_context(|| format!("installing state {}", path.display()))?;
+    Ok(())
+}
+
+fn load_state(path: &PathBuf) -> Result<SavedState> {
+    let file = std::fs::File::open(path)
+        .with_context(|| format!("opening saved state {}", path.display()))?;
+    plist::from_reader_xml(file).context("decoding saved rustpush state")
+}
+
+fn load_config(path: &PathBuf) -> Result<Arc<MacOSConfig>> {
+    let file = std::fs::File::open(path)
+        .with_context(|| format!("opening hardware config {}", path.display()))?;
+    let config: MacOSConfig =
+        plist::from_reader_xml(file).context("decoding MacOSConfig hardware data")?;
+    Ok(Arc::new(config))
+}
+
+fn chat_id_from_participants(participants: &[String], self_handles: &[String]) -> String {
+    let mut filtered: Vec<String> = participants
+        .iter()
+        .filter(|participant| !self_handles.contains(participant))
+        .cloned()
+        .collect();
+    filtered.sort();
+    let encoded = URL_SAFE_NO_PAD.encode(filtered.join("\n"));
+    format!("imsg:{encoded}")
+}
+
+fn participants_from_chat_id(chat_id: &str) -> Result<Vec<String>> {
+    let encoded = chat_id
+        .strip_prefix("imsg:")
+        .ok_or_else(|| anyhow!("unsupported chatId format"))?;
+    let bytes = URL_SAFE_NO_PAD
+        .decode(encoded)
+        .context("invalid encoded chatId")?;
+    let decoded = String::from_utf8(bytes).context("chatId is not UTF-8")?;
+    let participants: Vec<String> = decoded
+        .split('\n')
+        .filter(|participant| !participant.is_empty())
+        .map(str::to_owned)
+        .collect();
+
+    if participants.is_empty() {
+        return Err(anyhow!("chatId contains no recipients"));
+    }
+
+    Ok(participants)
+}
+
+async fn emit(event: &Event) -> Result<()> {
+    let mut stdout = tokio::io::stdout();
+    let mut line = serde_json::to_vec(event)?;
+    line.push(b'\n');
+    stdout.write_all(&line).await?;
+    stdout.flush().await?;
+    Ok(())
+}
+
+fn prompt_line(prompt: &str) -> Result<String> {
+    print!("{prompt}");
+    io::stdout().flush()?;
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    Ok(input.trim().to_string())
+}
+
+async fn provision() -> Result<()> {
+    let hwconfig_path = env_path("IMSG_RUSTPUSH_HWCONFIG", DEFAULT_HWCONFIG);
+    let state_path = env_path("IMSG_RUSTPUSH_STATE", DEFAULT_STATE);
+    let anisette_path = env_path("IMSG_RUSTPUSH_ANISETTE", DEFAULT_ANISETTE);
+
+    let config = load_config(&hwconfig_path)?;
+    let (connection, error) = APSConnectionResource::new(config.clone(), None).await;
+    if let Some(error) = error {
+        return Err(anyhow!("APS connection setup failed: {error}"));
+    }
+
+    let anisette_client = default_provider(
+        config.get_gsa_config(&*connection.state.read().await, false),
+        anisette_path,
+    );
+
+    let apple_id = prompt_line("Apple ID: ")?;
+    let password = prompt_password("Apple password: ")?;
+    let password_hash = Sha256::digest(password.as_bytes()).to_vec();
+    let credentials = (apple_id, password_hash);
+
+    let two_factor = || -> String {
+        prompt_line("Apple 2FA code: ").unwrap_or_default()
+    };
+
+    let account = AppleAccount::login(
+        || credentials.clone(),
+        two_factor,
+        config.get_gsa_config(&*connection.state.read().await, false),
+        anisette_client.clone(),
+    )
+    .await
+    .context("Apple Account login failed")?;
+
+    account
+        .update_postdata("Apple Device", None, &["icloud", "imessage", "facetime"])
+        .await
+        .context("updating Apple account service metadata")?;
+
+    let delegates = login_apple_delegates(
+        &account,
+        None,
+        config.as_ref(),
+        &[LoginDelegate::IDS, LoginDelegate::MobileMe],
+    )
+    .await
+    .context("creating iMessage authentication delegates")?;
+
+    let ids_delegate = delegates
+        .ids
+        .ok_or_else(|| anyhow!("Apple did not return an IDS delegate"))?;
+
+    let user = authenticate_apple(ids_delegate, config.as_ref())
+        .await
+        .context("authenticating IDS user")?;
+
+    let identity = IDSNGMIdentity::new().context("creating local iMessage identity")?;
+    let mut users = vec![user];
+
+    let services = &[&MADRID_SERVICE, &MULTIPLEX_SERVICE, &FACETIME_SERVICE, &VIDEO_SERVICE];
+
+    register(
+        config.as_ref(),
+        &*connection.state.read().await,
+        services,
+        &mut users,
+        &identity,
+    )
+    .await
+    .context("registering Linux iMessage identity")?;
+
+    let saved = SavedState {
+        push: connection.state.read().await.clone(),
+        users,
+        identity,
+    };
+
+    save_state(&state_path, &saved)?;
+
+    println!("Provisioning complete.");
+    println!("Saved state: {}", state_path.display());
+    println!("Hardware config: {}", hwconfig_path.display());
+
+    Ok(())
+}
+
+async fn bridge() -> Result<()> {
+    let hwconfig_path = env_path("IMSG_RUSTPUSH_HWCONFIG", DEFAULT_HWCONFIG);
+    let state_path = env_path("IMSG_RUSTPUSH_STATE", DEFAULT_STATE);
+
+    let config = load_config(&hwconfig_path)?;
+    let saved = load_state(&state_path)?;
+
+    let (connection, error) =
+        APSConnectionResource::new(config.clone(), Some(saved.push.clone())).await;
+
+    if let Some(error) = error {
+        emit(&Event::Error {
+            error: format!("APS connection setup failed: {error}"),
+        })
+        .await?;
+        return Err(anyhow!("APS connection setup failed: {error}"));
+    }
+
+    let state = Arc::new(Mutex::new(saved.clone()));
+    let state_for_callback = Arc::clone(&state);
+    let state_path_for_callback = state_path.clone();
+
+    let users = saved.users.clone();
+    let identity = saved.identity.clone();
+
+    let client = IMClient::new(
+        connection.clone(),
+        users,
+        identity,
+        &[&MADRID_SERVICE, &MULTIPLEX_SERVICE, &FACETIME_SERVICE, &VIDEO_SERVICE],
+        PathBuf::from("id_cache.plist"),
+        config.clone(),
+        Box::new(move |updated_users| {
+            if let Ok(mut state) = state_for_callback.lock() {
+                state.users = updated_users;
+                if let Err(error) = save_state(&state_path_for_callback, &state) {
+                    eprintln!("[rustpush] failed to persist users: {error:#}");
+                }
+            }
+        }),
+    )
+    .await;
+
+    let handles = client.identity.get_handles().await;
+    emit(&Event::Ready).await?;
+    emit(&Event::Status { connected: true }).await?;
+
+    let mut subscription = connection.messages_cont.subscribe();
+    let stdin = tokio::io::stdin();
+    let mut lines = BufReader::new(stdin).lines();
+
+    loop {
+        tokio::select! {
+            line = lines.next_line() => {
+                match line? {
+                    Some(line) if !line.trim().is_empty() => {
+                        match serde_json::from_str::<Request>(&line) {
+                            Ok(Request::Send { chat_id, text }) => {
+                                let participants = match participants_from_chat_id(&chat_id) {
+                                    Ok(participants) => participants,
+                                    Err(error) => {
+                                        emit(&Event::Error { error: error.to_string() }).await?;
+                                        continue;
+                                    }
+                                };
+
+                                let sender = match handles.first() {
+                                    Some(sender) => sender.clone(),
+                                    None => {
+                                        emit(&Event::Error {
+                                            error: "no registered iMessage handle".to_string(),
+                                        }).await?;
+                                        continue;
+                                    }
+                                };
+
+                                let conversation = ConversationData {
+                                    participants,
+                                    cv_name: None,
+                                    sender_guid: None,
+                                    after_guid: None,
+                                };
+
+                                let message = NormalMessage::new(text, MessageType::IMessage);
+                                let mut message = MessageInst::new(
+                                    conversation,
+                                    &sender,
+                                    Message::Message(message),
+                                );
+
+                                match client.send(&mut message).await {
+                                    Ok(_) => {
+                                        emit(&Event::Sent {
+                                            id: message.id,
+                                            chat_id,
+                                        }).await?;
+                                    }
+                                    Err(error) => {
+                                        emit(&Event::Error {
+                                            error: format!("send failed: {error}"),
+                                        }).await?;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    None => break,
+                    _ => {}
+                }
+            }
+            incoming = subscription.recv() => {
+                match incoming {
+                    Ok(aps_message) => {
+                        match client.handle(aps_message).await {
+                            Ok(Some(message)) if message.has_payload() => {
+                                if let Message::Message(normal) = &message.message {
+                                    let conversation = message.conversation.clone();
+                                    let participants = conversation
+                                        .as_ref()
+                                        .map(|data| data.participants.clone())
+                                        .unwrap_or_default();
+
+                                    let normalized = NormalizedMessage {
+                                        id: message.id.clone(),
+                                        chat_id: chat_id_from_participants(&participants, &handles),
+                                        sender: message.sender.clone(),
+                                        chat_name: conversation
+                                            .as_ref()
+                                            .and_then(|data| data.cv_name.clone()),
+                                        is_group: conversation
+                                            .as_ref()
+                                            .map(ConversationData::is_group)
+                                            .unwrap_or(false),
+                                        text: normal.parts.raw_text(),
+                                        attachments: Vec::new(),
+                                    };
+
+                                    emit(&Event::Message { message: normalized }).await?;
+                                }
+                            }
+                            Ok(Some(_)) | Ok(None) => {}
+                            Err(error) => {
+                                emit(&Event::Error {
+                                    error: format!("receive failed: {error}"),
+                                })
+                                .await?;
+                            }
+                        }
+
+                        let current_push = connection.state.read().await.clone();
+                        if let Ok(mut state) = state.lock() {
+                            state.push = current_push;
+                            if let Err(error) = save_state(&state_path, &state) {
+                                eprintln!("[rustpush] failed to persist connection state: {error:#}");
+                            }
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(count)) => {
+                        emit(&Event::Error {
+                            error: format!("incoming message buffer lagged by {count} events"),
+                        })
+                        .await?;
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        emit(&Event::Status { connected: false }).await?;
+                        return Err(anyhow!("rustpush connection message stream closed"));
+                    }
+                }
+            }
+        }
+    }
+
+    emit(&Event::Status { connected: false }).await?;
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    match std::env::args().nth(1).as_deref() {
+        Some("provision") => provision().await,
+        Some("bridge") | None => bridge().await,
+        Some(command) => Err(anyhow!(
+            "unknown command {command}; use provision or bridge"
+        )),
+    }
+}
