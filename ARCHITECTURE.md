@@ -167,3 +167,12 @@ The delete button and settings interactions are restricted to OWNER_ID in CHANNE
 The Linux transport uses exponential restart backoff when its local backend exits unexpectedly. The first retry is five seconds and the delay grows to a maximum of sixty seconds. A clean bot shutdown disables automatic restarts.
 
 The repository's tests use Node's built-in test runner and include privacy-policy tests, normalized transport tests, and a Linux subprocess integration test. GitHub Actions runs the test suite on Node 20 and Node 22.
+
+
+## Linux sidecar
+
+`linux-sidecar/` is the Rust process boundary for the eventual direct Linux iMessage backend.
+
+The current sidecar implements the stable NDJSON process protocol and reports a clear error for send requests until the direct rustpush-backed implementation is enabled. The Node `LinuxTransport` process supervisor, not the sidecar, owns restart/backoff behavior.
+
+The Cargo manifest pins the evaluated rustpush revision behind the optional `direct-imessage` feature so the protocol scaffold can build independently while the Apple authentication and IMClient integration are developed.
