@@ -82,3 +82,17 @@ Legend:
 [ ] Windows backend if a viable transport exists.
 [ ] ARM64 Linux after x86_64 is stable.
 [ ] Raspberry Pi only if the chosen iMessage backend supports ARM64.
+
+
+## Discord privacy controls
+[x] Persist privacy/deletion settings in state.json.
+[x] Add /imsg-settings slash command.
+[x] Add an ephemeral Discord settings panel with buttons.
+[x] Add notification-only mode that never forwards message contents.
+[x] Add hide-contact mode.
+[x] Add per-message Delete Discord copy button.
+[x] Add configurable auto-delete timer.
+[x] Restore pending timed deletions after bot restart.
+[ ] Add optional separate settings for different chats.
+[ ] Add configurable auto-delete presets beyond seconds.
+[ ] Add attachment-specific privacy policy.
