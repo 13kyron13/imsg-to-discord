@@ -113,6 +113,9 @@ Legend:
 [x] Bridge incoming IMClient text/events to normalized NDJSON.
 [x] Bridge NDJSON text send requests to IMClient.
 [x] Add incoming attachment download and local cache.
+[x] Add Linux direct-backend hardware validation checklist.
+[x] Add Linux direct-backend build helper.
+[x] Add direct-backend routing/unit tests.
 [ ] End-to-end test on x86_64 Linux with a real Apple test account.
 
 ## Rust sidecar
