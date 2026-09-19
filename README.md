@@ -135,11 +135,27 @@ Configure:
 
 ```text
 MESSAGE_BACKEND=linux
-LINUX_IMESSAGE_COMMAND=/path/to/backend
-LINUX_IMESSAGE_ARGS=[]
+LINUX_IMESSAGE_COMMAND=/path/to/imsg-direct
+LINUX_IMESSAGE_ARGS=["bridge"]
 ```
 
 Arguments must be a JSON array.
+
+The repository includes a Linux build helper:
+
+```bash
+bash build-linux-direct.sh
+```
+
+That builds the direct backend at `linux-sidecar/direct-imessage/target/release/imsg-direct`.
+
+Before starting the Discord bot, provision the Apple account once:
+
+```bash
+linux-sidecar/direct-imessage/target/release/imsg-direct provision
+```
+
+Then keep the Mac offline and start the bridge through the normal systemd/Discord setup.
 
 The backend emits incoming messages as:
 
