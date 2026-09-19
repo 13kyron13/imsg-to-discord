@@ -25,7 +25,18 @@ async function loadContacts() {
   const now = Date.now();
   if (now - contactsCacheTime < 60000) return contactsCache;
 
-  const script = 'tell application "Contacts"\nset output to {}\nrepeat with p in people\nset personName to name of p\nrepeat with ph in phones of p\nset phoneNumber to value of ph\nset end of output to phoneNumber & "\\t" & personName\nend repeat\nend repeat\nset AppleScript\\'s text item delimiters to linefeed\nreturn output as text\nend tell';
+  const script = `tell application "Contacts"
+set output to {}
+repeat with p in people
+set personName to name of p
+repeat with ph in phones of p
+set phoneNumber to value of ph
+set end of output to phoneNumber & "\\t" & personName
+end repeat
+end repeat
+set AppleScript's text item delimiters to linefeed
+return output as text
+end tell`;
 
   try {
     const { stdout } = await execFileAsync('osascript', ['-e', script]);
