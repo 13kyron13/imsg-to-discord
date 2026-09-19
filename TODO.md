@@ -35,8 +35,8 @@ Legend:
 [x] Add NDJSON subprocess protocol.
 [x] Add Linux contacts.json fallback.
 [x] Add systemd user startup.
-[~] Define stable backend event schema.
-[~] Integrate the direct-iMessage Linux backend.
+[x] Define stable backend event schema.
+[~] Integrate the direct-iMessage Linux backend; real Apple hardware validation remains.
 [x] Design direct Rust sidecar integration.
 [x] Add hardware-config loading to the direct backend.
 [ ] Add x86_64 NAC validation.
@@ -101,7 +101,7 @@ Legend:
 [x] Add privacy unit tests.
 [x] Add transport normalization tests.
 [x] Add Linux NDJSON transport integration test.
-[x] Add GitHub Actions CI for Node 20 and 22.
+[x] Add GitHub Actions CI for Node 22 and 24.
 
 ## Linux rustpush integration
 [x] Add dedicated Rust sidecar scaffold instead of using rustpush test executable.
