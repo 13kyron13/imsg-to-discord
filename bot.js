@@ -301,9 +301,9 @@ async function registerSettingsCommand() {
   const existing = commands.find(command => command.name === SETTINGS_COMMAND.name);
 
   if (existing) {
-    await existing.edit(SETTINGS_COMMAND);
+    await existing.edit(SETTINGS_COMMAND.toJSON());
   } else {
-    await channel.guild.commands.create(SETTINGS_COMMAND);
+    await channel.guild.commands.create(SETTINGS_COMMAND.toJSON());
   }
 }
 
