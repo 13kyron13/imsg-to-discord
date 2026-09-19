@@ -21,6 +21,11 @@ jobs:
           rustup toolchain install stable --profile minimal
           rustup default stable
 
+      - name: Configure public Git dependencies
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+
       - name: Check formatting
         run: cargo fmt --manifest-path linux-sidecar/Cargo.toml -- --check
 
