@@ -1,4 +1,5 @@
 console.log(JSON.stringify({ event: 'ready' }));
+console.log(JSON.stringify({ event: 'status', connected: true }));
 
 setTimeout(() => {
   console.log(JSON.stringify({
@@ -9,6 +10,7 @@ setTimeout(() => {
       sender: '+61400000000',
       text: 'hello',
       isGroup: false,
+      service: 'imessage',
     },
   }));
 }, 25);
@@ -20,7 +22,8 @@ require('readline')
       const request = JSON.parse(line);
 
       if (request.action === 'send') {
-        process.stderr.write('send:' + request.chatId + '\n');
+        process.stderr.write('send:' + request.chatId + '
+');
       }
     } catch {
       // Ignore malformed test input.
