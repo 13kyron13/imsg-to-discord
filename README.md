@@ -1,6 +1,5 @@
 
 # iMessage to Discord
-=======
 
 Forward incoming iMessages and SMS from a Mac to a private Discord channel, get pinged when they arrive, and reply straight from Discord.
 
