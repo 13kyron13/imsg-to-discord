@@ -108,6 +108,18 @@ class LinuxTransport extends MessageTransport {
     this.spawnBackend();
   }
 
+  status() {
+    return {
+      backend: 'linux',
+      connected: Boolean(this.child && this.child.stdin.writable),
+      details: this.child
+        ? 'Local iMessage backend process is running.'
+        : this.restartTimer
+          ? 'Local iMessage backend is waiting to restart.'
+          : 'Local iMessage backend process is not running.',
+    };
+  }
+
   async sendText(chatId, text) {
     if (!this.child || !this.child.stdin.writable) {
       throw new Error('Linux iMessage backend is not running');
