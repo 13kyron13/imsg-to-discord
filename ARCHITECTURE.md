@@ -22,10 +22,13 @@ The project is split into a Discord layer and a message transport layer.
 bot.js handles:
 - Discord authentication
 - owner/channel authorization
-- formatting
+- settings commands and buttons
 - attachment uploads
 - reply routing
 - persistent state
+- privacy/deletion presentation policy orchestration
+
+src/privacy.js contains the platform-independent privacy policy and is intentionally free of Discord SDK code so it can be unit tested.
 
 bot.js must not contain platform-specific Apple operations.
 
@@ -157,3 +160,10 @@ Button adds a Delete Discord copy button to each forwarded message. Pressing it 
 Timer deletes the Discord copy after deleteAfterSeconds. Pending deletion timestamps are persisted and restored after restart.
 
 The delete button and settings interactions are restricted to OWNER_ID in CHANNEL_ID.
+
+
+## Reliability
+
+The Linux transport uses exponential restart backoff when its local backend exits unexpectedly. The first retry is five seconds and the delay grows to a maximum of sixty seconds. A clean bot shutdown disables automatic restarts.
+
+The repository's tests use Node's built-in test runner and include privacy-policy tests, normalized transport tests, and a Linux subprocess integration test. GitHub Actions runs the test suite on Node 20 and Node 22.
