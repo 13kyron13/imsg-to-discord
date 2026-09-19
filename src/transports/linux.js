@@ -62,9 +62,8 @@ class LinuxTransport extends MessageTransport {
         } else if (event.event === 'error') {
           console.error('[linux backend]', event.error || event.message || 'unknown error');
         } else if (event.event === 'ready') {
-          this.backendConnected = true;
           this.restartDelay = DEFAULT_RESTART_DELAY_MS;
-          console.log('[linux] backend reports ready');
+          console.log('[linux] backend process is ready');
         } else if (event.event === 'status') {
           this.backendConnected = Boolean(event.connected);
           console.log('[linux] backend status:', this.backendConnected ? 'connected' : 'disconnected');
