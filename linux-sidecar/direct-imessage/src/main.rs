@@ -270,16 +270,42 @@ async fn save_incoming_attachments(
         let name = sanitize_filename(&attachment.name, &fallback);
         let filename = format!("{}_{}_{}", sanitize_id(message_id), index, name);
         let path = dir.join(filename);
-        let file = fs::File::create(&path)?;
-        attachment
+        let file = match fs::File::create(&path) {
+            Ok(file) => file,
+            Err(error) => {
+                eprintln!(
+                    "[rustpush] could not create attachment {}: {error}",
+                    path.display()
+                );
+                continue;
+            }
+        };
+
+        if let Err(error) = attachment
             .get_attachment(connection.resource.as_ref(), file, |_done, _total| {})
             .await
-            .with_context(|| format!("downloading attachment {}", attachment.name))?;
+        {
+            eprintln!(
+                "[rustpush] could not download attachment {}: {error}",
+                attachment.name
+            );
+            let _ = fs::remove_file(&path);
+            continue;
+        }
 
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
+            if let Err(error) =
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+            {
+                eprintln!(
+                    "[rustpush] could not protect attachment {}: {error}",
+                    path.display()
+                );
+                let _ = fs::remove_file(&path);
+                continue;
+            }
         }
 
         attachments.push(Attachment {
@@ -558,7 +584,13 @@ async fn bridge() -> Result<()> {
                                     let is_sms = matches!(normal.service, MessageType::SMS { .. });
                                     let attachments =
                                         save_incoming_attachments(&connection, &message.id, normal)
-                                            .await?;
+                                            .await
+                                            .unwrap_or_else(|error| {
+                                                eprintln!(
+                                                    "[rustpush] attachment processing failed: {error:#}"
+                                                );
+                                                Vec::new()
+                                            });
 
                                     let normalized = NormalizedMessage {
                                         id: message.id.clone(),
