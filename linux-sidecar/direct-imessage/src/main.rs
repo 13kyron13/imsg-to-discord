@@ -384,7 +384,7 @@ async fn provision() -> Result<()> {
 
     let two_factor = || -> String { prompt_line("Apple 2FA code: ").unwrap_or_default() };
 
-    let account = AppleAccount::login(
+    let mut account = AppleAccount::login(
         || credentials.clone(),
         two_factor,
         config.get_gsa_config(&*connection.state.read().await, false),
