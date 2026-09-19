@@ -296,9 +296,7 @@ async fn save_incoming_attachments(
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            if let Err(error) =
-                fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
-            {
+            if let Err(error) = fs::set_permissions(&path, fs::Permissions::from_mode(0o600)) {
                 eprintln!(
                     "[rustpush] could not protect attachment {}: {error}",
                     path.display()
