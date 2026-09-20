@@ -11,3 +11,4 @@ hwconfig.plist
 anisette/
 id_cache.plist
 target/
+.runtime/
