@@ -27,6 +27,7 @@ repeat with ph in phones of p
 set phoneNumber to value of ph
 set end of output to phoneNumber & "\\t" & personName
 end repeat
+end repeat
 repeat with p in people
 set personName to name of p
 repeat with em in emails of p
