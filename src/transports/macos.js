@@ -5,18 +5,12 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { MessageTransport, normalizeMessage } = require('../transport');
+const { normalizeIdentifier, parseContactsOutput } = require('../contacts');
 
 const execFileAsync = promisify(execFile);
 const CHAT_DB = path.join(os.homedir(), 'Library/Messages/chat.db');
 const ATTACH_DIR = path.join(os.homedir(), 'Library/Messages/Attachments');
 const MAX_UPLOAD_BYTES = (Number(process.env.MAX_UPLOAD_MB) || 9.5) * 1024 * 1024;
-
-function clean(s) {
-  if (!s) return '';
-  let n = String(s).replace(/\D/g, '');
-  if (n.startsWith('0') && n.length === 10) n = '61' + n.slice(1);
-  return n;
-}
 
 let contactsCache = {};
 let contactsCacheTime = 0;
@@ -33,6 +27,12 @@ repeat with ph in phones of p
 set phoneNumber to value of ph
 set end of output to phoneNumber & "\\t" & personName
 end repeat
+repeat with p in people
+set personName to name of p
+repeat with em in emails of p
+set emailAddress to value of em
+set end of output to emailAddress & "\\t" & personName
+end repeat
 end repeat
 set AppleScript's text item delimiters to linefeed
 return output as text
@@ -40,14 +40,7 @@ end tell`;
 
   try {
     const { stdout } = await execFileAsync('osascript', ['-e', script]);
-    const contacts = {};
-    for (const line of stdout.trim().split('\n')) {
-      const tab = line.indexOf('\t');
-      if (tab === -1) continue;
-      const number = clean(line.slice(0, tab));
-      const name = line.slice(tab + 1).trim();
-      if (number && name) contacts[number] = name;
-    }
+    const contacts = parseContactsOutput(stdout);
     contactsCache = contacts;
     contactsCacheTime = now;
     return contacts;
@@ -155,7 +148,7 @@ class MacOSTransport extends MessageTransport {
         await onMessage(normalizeMessage({
           id: String(r.id),
           chatId: r.chat_guid,
-          sender: contacts[clean(r.sender)] || r.sender || 'Unknown',
+          sender: contacts[normalizeIdentifier(r.sender)] || r.sender || 'Unknown',
           chatName: r.chat_name || null,
           isGroup: r.chat_style === 43,
           text: [text, ...prepared.notes].filter(Boolean).join('\n'),
