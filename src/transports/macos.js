@@ -41,8 +41,8 @@ end tell`;
   try {
     const { stdout } = await execFileAsync('osascript', ['-e', script]);
     const contacts = {};
-    for (const line of stdout.trim().split('\\n')) {
-      const tab = line.indexOf('\\t');
+    for (const line of stdout.trim().split('\n')) {
+      const tab = line.indexOf('\t');
       if (tab === -1) continue;
       const number = clean(line.slice(0, tab));
       const name = line.slice(tab + 1).trim();
